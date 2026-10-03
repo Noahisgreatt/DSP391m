@@ -1,0 +1,16 @@
+torch==2.6.0+cu124 
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
+nvidia-cudnn-cu12
+nvidia-cuda-runtime-cu12
+triton
+decord==0.6.0
+opencv-python==5.0.0.93
+pillow==12.3.0
+dvc==3.67.1
+dvc-gdrive==3.0.1
+pydrive2
+google-api-python-client
+numpy==2.4.6
+plotly==7.1.0
+uv==0.12.22
