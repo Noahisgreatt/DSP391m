@@ -1,0 +1,163 @@
+schema: '2.0'
+stages:
+  extract_frames_manual:
+    cmd: python -m src.data.extract_frames
+    deps:
+    - path: data/raw/manual
+      hash: md5
+      md5: 2b4fa41f12fd76eae4a2cfc0d46d4148.dir
+      size: 563443345
+      nfiles: 45
+    - path: src/data/extract_frames.py
+      hash: md5
+      md5: 330eaf24e2432c4c4cd4b8c5920cb2b0
+      size: 3067
+    - path: src/utils.py
+      hash: md5
+      md5: 5e8c336f86e32bf8c692e52eb70e52f0
+      size: 2818
+    params:
+      params.yaml:
+        frames:
+          resize:
+          - 640
+          - 360
+          step: 1
+          jpg_quality: 95
+          video_exts:
+          - .mp4
+          - .avi
+          - .mov
+          - .mkv
+          - .MP4
+          - .AVI
+          - .MOV
+          - .MKV
+    outs:
+    - path: data/interim/frames/manual
+      hash: md5
+      md5: 26822f494eff192f7f89e3cfe6186204.dir
+      size: 1829881747
+      nfiles: 15014
+  flow_shanghai:
+    cmd: python -m src.features.optical_flow --dataset shanghai
+    deps:
+    - path: data/raw/SHANGHAI/SHANGHAI_TRAIN/frames
+      hash: md5
+      md5: 327a7d972c90952f56616b5ba5fcf695.dir
+      size: 11685078974
+      nfiles: 173336
+    - path: src/features/direction.py
+      hash: md5
+      md5: 6ffe4e70723066310fae2892ecc0c187
+      size: 3507
+    - path: src/features/optical_flow.py
+      hash: md5
+      md5: 7a9e5d213636b21038665af025658c67
+      size: 4844
+    - path: src/utils.py
+      hash: md5
+      md5: 5e8c336f86e32bf8c692e52eb70e52f0
+      size: 2818
+    params:
+      params.yaml:
+        direction:
+          grid:
+          - 8
+          - 8
+          n_bins: 8
+          min_magnitude: 1.0
+          min_moving_fraction: 0.02
+        flow:
+          method: farneback
+          farneback:
+            pyr_scale: 0.5
+            levels: 3
+            winsize: 15
+            iterations: 3
+            poly_n: 5
+            poly_sigma: 1.2
+          save_small_flow: false
+          small_flow_downscale: 8
+        frames:
+          resize:
+          - 640
+          - 360
+          step: 1
+          jpg_quality: 95
+          video_exts:
+          - .mp4
+          - .avi
+          - .mov
+          - .mkv
+          - .MP4
+          - .AVI
+          - .MOV
+          - .MKV
+    outs:
+    - path: data/features/farneback/shanghai
+      hash: md5
+      md5: 3ecb7b2fc7fb20bc6f8e29ce41c4c738.dir
+      size: 22261740
+      nfiles: 238
+  flow_manual:
+    cmd: python -m src.features.optical_flow --dataset manual
+    deps:
+    - path: data/interim/frames/manual
+      hash: md5
+      md5: 26822f494eff192f7f89e3cfe6186204.dir
+      size: 1829881747
+      nfiles: 15014
+    - path: src/features/direction.py
+      hash: md5
+      md5: 6ffe4e70723066310fae2892ecc0c187
+      size: 3507
+    - path: src/features/optical_flow.py
+      hash: md5
+      md5: 7a9e5d213636b21038665af025658c67
+      size: 4844
+    - path: src/utils.py
+      hash: md5
+      md5: 5e8c336f86e32bf8c692e52eb70e52f0
+      size: 2818
+    params:
+      params.yaml:
+        direction:
+          grid:
+          - 8
+          - 8
+          n_bins: 8
+          min_magnitude: 1.0
+          min_moving_fraction: 0.02
+        flow:
+          method: farneback
+          farneback:
+            pyr_scale: 0.5
+            levels: 3
+            winsize: 15
+            iterations: 3
+            poly_n: 5
+            poly_sigma: 1.2
+          save_small_flow: false
+          small_flow_downscale: 8
+        frames:
+          resize:
+          - 640
+          - 360
+          step: 1
+          jpg_quality: 95
+          video_exts:
+          - .mp4
+          - .avi
+          - .mov
+          - .mkv
+          - .MP4
+          - .AVI
+          - .MOV
+          - .MKV
+    outs:
+    - path: data/features/farneback/manual
+      hash: md5
+      md5: 5948cab7f34d59977dce3f66f8e3db0e.dir
+      size: 2087324
+      nfiles: 45
