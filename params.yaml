@@ -1,0 +1,41 @@
+# Global, dataset-level parameters shared by every stage.
+# Per-experiment settings live in configs/ (one YAML per experiment).
+
+paths:
+  raw: data/raw
+  frames: data/interim/frames
+  features: data/features
+  labels: data/labels
+  models: models
+  outputs: outputs
+
+datasets:
+  shanghaitech:
+    # After scripts/download_shanghaitech.py the layout is:
+    #   data/raw/shanghaitech/training/videos/*.avi          (normal only)
+    #   data/raw/shanghaitech/testing/frames/<video_id>/*.jpg
+    #   data/raw/shanghaitech/testing/test_frame_mask/<video_id>.npy   (GT, 0/1 per frame)
+    train_videos: data/raw/shanghaitech/training/videos
+    train_frames: data/raw/shanghaitech/training/frames   # used if train comes as frame folders
+    train_gt: data/raw/shanghaitech/training/test_frame_mask
+    test_frames: data/raw/shanghaitech/testing/frames
+    test_gt: data/raw/shanghaitech/testing/test_frame_mask
+    # The Kaggle copy (nikanvasei/shanghaitech-campus-dataset) uses the weakly-supervised
+    # split: some TRAIN clips contain anomalies (e.g. 01_0014). Unsupervised future-flow
+    # training needs normal-only train data, so: drop | move_to_test | keep
+    train_with_anomaly: move_to_test
+    fps: 25
+  manual:
+    # Your own final-check videos (e.g. the nvhsv demo). GT is optional:
+    #   data/raw/manual/videos/*.mp4  and  data/raw/manual/gt/<video_id>.npy
+    train_videos: null
+    test_videos: data/raw/manual/videos
+    test_gt: data/raw/manual/gt
+    fps: 30
+
+extract:
+  ext: jpg
+  max_side: 856        # longest side after resize (ShanghaiTech native is 856x480)
+  jpeg_quality: 95
+
+seed: 42
