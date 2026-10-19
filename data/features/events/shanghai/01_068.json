@@ -1,0 +1,159 @@
+{
+  "video": "01_068",
+  "scene": "01",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 1,
+      "event": "ABNORMAL",
+      "start_frame": 3,
+      "end_frame": 25,
+      "start_s": 0.12,
+      "end_s": 1.0
+    },
+    {
+      "track_id": 2,
+      "event": "ABNORMAL",
+      "start_frame": 4,
+      "end_frame": 64,
+      "start_s": 0.16,
+      "end_s": 2.56
+    },
+    {
+      "track_id": 5,
+      "event": "ABNORMAL",
+      "start_frame": 127,
+      "end_frame": 401,
+      "start_s": 5.08,
+      "end_s": 16.04
+    },
+    {
+      "track_id": 2,
+      "event": "LOITERING",
+      "start_frame": 282,
+      "end_frame": 361,
+      "start_s": 11.28,
+      "end_s": 14.44
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 310,
+      "end_frame": 351,
+      "start_s": 12.4,
+      "end_s": 14.04
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 316,
+      "end_frame": 326,
+      "start_s": 12.64,
+      "end_s": 13.04
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 344,
+      "end_frame": 344,
+      "start_s": 13.76,
+      "end_s": 13.76
+    },
+    {
+      "track_id": 41,
+      "event": "ABNORMAL",
+      "start_frame": 588,
+      "end_frame": 708,
+      "start_s": 23.52,
+      "end_s": 28.32
+    },
+    {
+      "track_id": 114,
+      "event": "ABNORMAL",
+      "start_frame": 637,
+      "end_frame": 896,
+      "start_s": 25.48,
+      "end_s": 35.84
+    },
+    {
+      "track_id": 174,
+      "event": "ABNORMAL",
+      "start_frame": 706,
+      "end_frame": 772,
+      "start_s": 28.24,
+      "end_s": 30.88
+    },
+    {
+      "track_id": 209,
+      "event": "ABNORMAL",
+      "start_frame": 773,
+      "end_frame": 975,
+      "start_s": 30.92,
+      "end_s": 39.0
+    },
+    {
+      "track_id": 174,
+      "event": "ABNORMAL",
+      "start_frame": 800,
+      "end_frame": 820,
+      "start_s": 32.0,
+      "end_s": 32.8
+    },
+    {
+      "track_id": 239,
+      "event": "ABNORMAL",
+      "start_frame": 854,
+      "end_frame": 946,
+      "start_s": 34.16,
+      "end_s": 37.84
+    },
+    {
+      "track_id": 290,
+      "event": "ABNORMAL",
+      "start_frame": 897,
+      "end_frame": 1023,
+      "start_s": 35.88,
+      "end_s": 40.92
+    },
+    {
+      "track_id": 353,
+      "event": "ABNORMAL",
+      "start_frame": 936,
+      "end_frame": 955,
+      "start_s": 37.44,
+      "end_s": 38.2
+    },
+    {
+      "track_id": 114,
+      "event": "ABNORMAL",
+      "start_frame": 937,
+      "end_frame": 1007,
+      "start_s": 37.48,
+      "end_s": 40.28
+    },
+    {
+      "track_id": 364,
+      "event": "ABNORMAL",
+      "start_frame": 946,
+      "end_frame": 980,
+      "start_s": 37.84,
+      "end_s": 39.2
+    },
+    {
+      "track_id": 353,
+      "event": "ABNORMAL",
+      "start_frame": 971,
+      "end_frame": 983,
+      "start_s": 38.84,
+      "end_s": 39.32
+    },
+    {
+      "track_id": 353,
+      "event": "ABNORMAL",
+      "start_frame": 1003,
+      "end_frame": 1022,
+      "start_s": 40.12,
+      "end_s": 40.88
+    }
+  ]
+}

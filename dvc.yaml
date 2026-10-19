@@ -1,60 +1,167 @@
-# Run everything:        dvc repro
-# One stage:             dvc repro train@vit_flow
-# Compare experiments:   dvc metrics show / dvc exp run --set-param configs/models/vit_flow.yaml:train.lr=5e-5
+# Pipeline, in order:  1 frames -> 2 features -> 3 rule baseline -> 4 thesis model -> 5 own model -> 6 compare
+# Run everything with `dvc repro`, or one stage with `dvc repro <stage>`.
+# Rule: no output folder may sit inside another stage's output folder. Training writes to
+# runs/<model>/dvc, evaluation writes to results/<model>/dvc, so they never overlap.
 stages:
-  extract_frames:
-    foreach: [shanghaitech, manual]
-    do:
-      cmd: python -m src.data.extract_frames --dataset ${item}
-      deps: ["src/data/extract_frames.py", "data/raw/${item}"]
-      params: [extract]
-      outs: ["data/interim/frames/${item}"]
+  # ---------------------------------------------------------------- 1. frames
+  extract_frames_manual:
+    cmd: python -m src.data.extract_frames
+    deps:
+      - data/raw/manual
+      - src/data/extract_frames.py
+      - src/utils.py
+    params:
+      - frames
+    outs:
+      - data/interim/frames/manual
 
-  optical_flow:
-    foreach: [shanghaitech, manual]
-    do:
-      cmd: >-
-        python -m src.features.optical_flow --dataset ${item} --config configs/features/farneback.yaml
-        && python -m src.features.direction --dataset ${item} --config configs/features/farneback.yaml
-      deps: ["src/features/optical_flow.py", "src/features/direction.py", "data/interim/frames/${item}"]
-      params:
-        - configs/features/farneback.yaml:
-      outs: ["data/features/farneback/${item}", "data/labels/farneback/${item}"]
+  # ---------------------------------------------------------------- 2. features
+  flow_shanghai:
+    cmd: python -m src.features.optical_flow --dataset shanghai
+    deps:
+      - data/raw/SHANGHAI/SHANGHAI_TRAIN/frames
+      - src/features/optical_flow.py
+      - src/features/direction.py
+      - src/utils.py
+    params:
+      - frames
+      - flow
+      - direction
+    outs:
+      - data/features/farneback/shanghai:
+          cache: false        # large and re-creatable; don't push it to Google Drive
 
-  tracking:
-    foreach: [shanghaitech, manual]
-    do:
-      cmd: python -m src.features.tracking --dataset ${item} --config configs/features/tracking.yaml
-      deps: ["src/features/tracking.py", "data/interim/frames/${item}"]
-      params:
-        - configs/features/tracking.yaml:
-      outs: ["data/features/tracking/${item}", "data/labels/tracking/${item}"]
+  flow_manual:
+    cmd: python -m src.features.optical_flow --dataset manual
+    deps:
+      - data/interim/frames/manual
+      - src/features/optical_flow.py
+      - src/features/direction.py
+      - src/utils.py
+    params:
+      - frames
+      - flow
+      - direction
+    outs:
+      - data/features/farneback/manual
 
-  train:
-    foreach: [vit_flow, convlstm_flow]
-    do:
-      cmd: python -m src.train --config configs/models/${item}.yaml
-      deps: ["src/train.py", "src/models", "src/data/dataset.py", "data/features/farneback/shanghaitech",
-             "data/labels/tracking/shanghaitech", "data/labels/farneback/shanghaitech"]
-      params:
-        - configs/models/${item}.yaml:
-      outs:
-        - models/${item}:
-            persist: true      # keep older runs; each run has its own <run_id> folder
+  track_shanghai:
+    cmd: python -m src.features.tracking --dataset shanghai
+    deps:
+      - data/raw/SHANGHAI/SHANGHAI_TRAIN/frames
+      - src/features/tracking.py
+      - src/features/direction.py
+      - src/utils.py
+    params:
+      - frames
+      - tracking
+    outs:
+      - data/features/tracking/shanghai:
+          cache: false
 
-  evaluate:
-    foreach: [vit_flow, convlstm_flow]
-    do:
-      cmd: >-
-        python -m src.evaluate --model ${item} --dataset shanghaitech
-        && python -m src.evaluate --model ${item} --dataset manual
-      deps: ["src/evaluate.py", "models/${item}", "data/features/farneback/manual"]
+  track_manual:
+    cmd: python -m src.features.tracking --dataset manual
+    deps:
+      - data/interim/frames/manual
+      - src/features/tracking.py
+      - src/features/direction.py
+      - src/utils.py
+    params:
+      - frames
+      - tracking
+    outs:
+      - data/features/tracking/manual
 
-  visualize:
-    foreach: [vit_flow, convlstm_flow]
-    do:
-      cmd: python -m src.visualize --model ${item} --dataset manual --all
-      deps: ["src/visualize.py", "models/${item}"]
-      outs:
-        - outputs/${item}:
-            cache: false
+  # ---------------------------------------------------------------- 3. rule baseline
+  rules_shanghai:
+    cmd: python -m src.baseline_rules --dataset shanghai
+    deps:
+      - data/features/farneback/shanghai
+      - data/features/tracking/shanghai
+      - src/baseline_rules.py
+    params:
+      - detection
+    outs:
+      - data/features/events/shanghai:
+          cache: false
+      - data/features/normal_maps/shanghai:
+          cache: false
+
+  rules_manual:
+    cmd: python -m src.baseline_rules --dataset manual
+    deps:
+      - data/features/farneback/manual
+      - data/features/tracking/manual
+      - src/baseline_rules.py
+    params:
+      - detection
+    outs:
+      - data/features/events/manual
+      - data/features/normal_maps/manual
+
+  # ---------------------------------------------------------------- 4. thesis model (ASTT)
+  train_thesis_astt:
+    cmd: python -m models.thesis_astt.train --config models/thesis_astt/config.yaml --run-name dvc
+    deps:
+      - data/raw/SHANGHAI/SHANGHAI_TRAIN
+      - models/thesis_astt/original_repo
+      - models/thesis_astt/model.py
+      - models/thesis_astt/train.py
+      - models/thesis_astt/config.yaml
+      - src/data/split.py
+    outs:
+      - runs/thesis_astt/dvc:
+          persist: true       # keep checkpoints if the stage is re-run
+
+  evaluate_thesis_astt:
+    cmd: python -m models.thesis_astt.evaluate --run runs/thesis_astt/dvc
+    deps:
+      - runs/thesis_astt/dvc
+      - models/thesis_astt/evaluate.py
+      - src/metrics.py
+    outs:
+      - results/thesis_astt/dvc/scores:
+          cache: false
+    metrics:
+      - results/thesis_astt/dvc/metrics_test.json:
+          cache: false
+
+  # ---------------------------------------------------------------- 5. own model (CrowdFormer)
+  train_crowdformer:
+    cmd: python -m models.crowdformer.train --config models/crowdformer/config.yaml --run-name dvc
+    deps:
+      - data/features/tracking/shanghai
+      - models/crowdformer/model.py
+      - models/crowdformer/dataset.py
+      - models/crowdformer/train.py
+      - models/crowdformer/config.yaml
+      - src/data/split.py
+    outs:
+      - runs/crowdformer/dvc:
+          persist: true
+
+  evaluate_crowdformer:
+    cmd: python -m models.crowdformer.evaluate --run runs/crowdformer/dvc
+    deps:
+      - runs/crowdformer/dvc
+      - models/crowdformer/evaluate.py
+      - src/metrics.py
+    outs:
+      - results/crowdformer/dvc/scores:
+          cache: false
+      - results/crowdformer/dvc/person_scores:
+          cache: false
+    metrics:
+      - results/crowdformer/dvc/metrics_test.json:
+          cache: false
+
+  # ---------------------------------------------------------------- 6. comparison
+  compare:
+    cmd: python -m src.compare --runs runs/thesis_astt/dvc runs/crowdformer/dvc
+    deps:
+      - results/thesis_astt/dvc/metrics_test.json
+      - results/crowdformer/dvc/metrics_test.json
+      - src/compare.py
+    outs:
+      - results/comparison:
+          cache: false

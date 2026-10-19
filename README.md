@@ -1,61 +1,90 @@
-# VAD — Phát hiện lảng vảng & đi ngược dòng (DSP391m)
+# DSP391m: Video anomaly detection (loitering and abnormal movement)
 
-Pipeline phát hiện bất thường mức khung hình, bám theo luận án của NCS Trần Minh Tùng
-(Spatial ViT → Temporal ViT → Temporal Cross-Attention → decoder dự đoán khung tương lai,
-học không giám sát, đo bằng AUC/EER), và nâng cấp ở 3 điểm:
+Two models are compared on ShanghaiTech:
+the **thesis model (ASTT)**, unchanged from Tran Minh Tung's thesis and GitHub repo, and
+**CrowdFormer**, our own model, which marks which *person* is abnormal.
+A rule-based detector (no training) is a third, simple baseline.
 
-| Luận án | Dự án này |
-|---|---|
-| Dự đoán **khung RGB** tiếp theo | Dự đoán **optical flow** tiếp theo — lảng vảng/ngược dòng là bất thường về *chuyển động* |
-| Giải mã từ một vector `[CLS]` | Giải mã từ **patch tokens** của khung cuối (giữ được *vị trí* của người bất thường) |
-| Chỉ lỗi tái tạo | Thêm **đầu phân loại** học từ nhãn giả (YOLO+ByteTrack và flow) → biết *loại* bất thường |
+## Folder map
 
-Mô hình: `vit_flow` (ViT-B/16 pretrained ImageNet, ~128M tham số) và baseline `convlstm_flow`
-(ResNet-50 + ConvLSTM, ~47M). `train.py` từ chối chạy nếu < `min_params` (35M).
-
-## Cấu trúc
 ```
-configs/features/{farneback,tracking}.yaml   # tham số đặc trưng / luật
-configs/models/{vit_flow,convlstm_flow}.yaml # mỗi thí nghiệm một YAML
-params.yaml                                  # đường dẫn dữ liệu, fps, chia tập
-src/data/extract_frames.py   video/thư mục ảnh → data/interim/frames/<ds>/<split>__<id>/000001.jpg
-src/data/dataset.py          cửa sổ L flow quá khứ → (flow kế tiếp, nhãn giả)
-src/features/optical_flow.py Farneback → data/features/farneback/<ds>/<id>.npz (flow + hist)
-src/features/direction.py    histogram hướng theo lưới, hướng chủ đạo mỗi ô của từng scene, nhãn ngược dòng từ flow
-src/features/tracking.py     YOLO+ByteTrack → tracks + luật lảng vảng/ngược dòng → data/labels/tracking/
-src/models/                  vit_flow.py, convlstm_flow.py (registry trong __init__.py)
-src/train.py / evaluate.py / visualize.py
-scripts/download_shanghaitech.py, download_gdrive.py
+DSP391m/
+├── README.md              <- you are here
+├── params.yaml            shared settings: frame size, flow, tracking, rule thresholds
+├── dvc.yaml               the whole pipeline (dvc repro), in order
+│
+├── data/                  DATA (not code)
+│   ├── raw/SHANGHAI/        ShanghaiTech frames + labels (DVC)
+│   ├── raw/manual/          our own phone videos (DVC, Google Drive)
+│   ├── interim/frames/      videos cut into frames (manual/, other/ = one-off videos)
+│   └── features/            per-video results of src/features: farneback/ tracking/ events/
+│
+├── models/                MODEL CODE, one folder per model, each with its own README
+│   ├── thesis_astt/         1. thesis model, unchanged
+│   │   ├── original_repo/     the GitHub repo, byte-for-byte (do not edit)
+│   │   ├── model.py           joins the repo's parts into the final thesis model
+│   │   ├── train.py  evaluate.py  config.yaml
+│   │   └── README.md
+│   └── crowdformer/         2. our own model
+│       ├── model.py  dataset.py  train.py  evaluate.py  config.yaml
+│       └── README.md
+│
+├── runs/                  TRAINING OUTPUT, one folder per run (created automatically)
+│   └── <model>/<run_id>/    config.yaml, split.json, log.csv, checkpoints, metrics.json
+│
+├── results/               EVALUATION OUTPUT (created automatically)
+│   ├── <model>/<run_id>/    metrics_test.json, scores/, videos/ (labelled result videos)
+│   ├── comparison/          comparison.md, comparison.csv, roc.png
+│   └── visualize/           arrow videos from src.visualize
+│
+├── src/                   SHARED PIPELINE (used by both models)
+│   ├── data/                extract_frames.py (video -> frames), split.py (train/val/test)
+│   ├── features/            optical_flow.py, tracking.py (YOLO + ByteTrack), direction.py
+│   ├── baseline_rules.py    rules: LOITERING, ABNORMAL (against crowd / too fast)
+│   ├── metrics.py           frame AUC + EER, identical for every model
+│   ├── compare.py           comparison table + ROC chart
+│   ├── predict.py           any video -> labelled result video
+│   ├── visualize.py  utils.py
+│
+├── configs/               extra settings files (features/, detection/)
+└── scripts/               dataset download helpers
 ```
-Mã video có tiền tố split (`train__01_001`, `test__01_0014`) nên mọi bước sau tự biết tập.
-Nhãn lớp: `0` bình thường, `1` lảng vảng, `2` ngược dòng.
 
-## Chạy
+The rule of thumb: **code** lives in `models/` and `src/`, **what training makes** goes to
+`runs/`, **what evaluation makes** goes to `results/`. Nothing in `runs/` or `results/` is
+written by hand.
+
+## Run order
+
 ```bash
-pip install -r requirements.txt
-python scripts/download_shanghaitech.py            # hoặc --src /kaggle/input/... trên Kaggle
-python scripts/download_gdrive.py --url <link thư mục> --out data/raw/manual/videos
+# 0. check which videos are train / val / test (same for both models)
+python -m src.data.split --config models/thesis_astt/config.yaml
 
-dvc repro                                          # toàn bộ pipeline, hoặc từng bước:
-python -m src.data.extract_frames --dataset shanghaitech
-python -m src.features.optical_flow --dataset shanghaitech
-python -m src.features.direction    --dataset shanghaitech
-python -m src.features.tracking     --dataset shanghaitech     # cần GPU, chậm nhất
-python -m src.evaluate --baseline tracking --dataset shanghaitech   # = cách làm trong notebook, trên toàn tập test
-python -m src.train --config configs/models/vit_flow.yaml
-python -m src.train --config configs/models/vit_flow.yaml --set train.lr=5e-5 train.epochs=10   # đổi tham số không sửa file
-python -m src.evaluate --model vit_flow --dataset shanghaitech
-python -m src.visualize --model vit_flow --dataset manual --all     # outputs/vit_flow/<run_id>/<video>.mp4
+# 1. features + rule baseline
+dvc repro track_shanghai          # people tracking (~1 h on GPU)
+dvc repro rules_shanghai
+
+# 2. thesis model
+python -m models.thesis_astt.train    --config models/thesis_astt/config.yaml
+python -m models.thesis_astt.evaluate --run runs/thesis_astt/<run_id>
+
+# 3. own model
+python -m models.crowdformer.train    --config models/crowdformer/config.yaml
+python -m models.crowdformer.evaluate --run runs/crowdformer/<run_id>
+
+# 4. compare (table + ROC in results/comparison/)
+python -m src.compare --runs runs/thesis_astt/<run_id> runs/crowdformer/<run_id>
+
+# 5. result video for any clip (people boxed with ABNORMAL / LOITERING)
+python -m src.predict --run runs/crowdformer/<run_id> --video path/to/clip.MOV
 ```
-Mỗi lần train tạo `models/<model>/<run_id>/` (mặc định `YYYY-MM-DD_lr1e-4`) gồm
-`config.yaml`, `best.pt`, `last.pt`, `metrics.json`; `latest.txt` trỏ tới lần chạy mới nhất.
+Add `--smoke` to a train command for a 2-minute test run.
+`<run_id>` is printed when training starts (a timestamp unless you pass `--run-name`).
+Or run steps 1-4 with DVC: `dvc repro compare` (its runs are called `dvc`).
 
-## Những sửa so với notebook
-- **Lảng vảng**: notebook đo từ *vị trí xuất hiện đầu tiên* với bán kính cố định 50 px → người đi vào rồi đứng lại không bao giờ bị bắt, người ở xa/gần bị đối xử khác nhau. Giờ: cửa sổ trượt `window_sec`, bán kính tính theo **chiều cao hộp**.
-- **Ngược dòng**: notebook dùng tích vô hướng thô (`dot < -50`) → phụ thuộc tốc độ và độ phân giải. Giờ: **cosine** với hướng trung bình của đám đông (bỏ chính người đó), chỉ khi đám đông có hướng rõ, và phải kéo dài `min_frames`.
-- **Đánh giá**: notebook tính AUC trên **một** clip (`01_0014`, nằm trong SHANGHAI_TRAIN). Giờ tính trên toàn bộ tập test, có EER (như luận án), AP, best-F1.
-- Bản Kaggle của ShanghaiTech dùng cách chia weakly-supervised: một số clip *train* có bất thường. `params.yaml: train_with_anomaly: move_to_test` chuyển chúng sang test để huấn luyện không giám sát chỉ thấy dữ liệu bình thường.
-
-## Lưu ý
-- GT gốc của ShanghaiTech **không** coi đứng yên là bất thường; AUC trên ShanghaiTech đo khả năng phát hiện bất thường chung. Để đánh giá đúng hai hành vi mục tiêu, cần gán GT cho tập `data/raw/manual/` (`gt/<video_id>.npy`, mảng 0/1 mỗi khung — cùng định dạng UIT-ADrone).
-- Dung lượng flow: 112×112 float16 ≈ 49 KB/khung (~13 GB cho train ShanghaiTech); tăng `frame_stride` nếu thiếu chỗ.
+## Metrics (same as the thesis, Chapter 5)
+- **Frame-level AUC-ROC**, main metric, higher is better. Reported per-video normalised
+  ("norm", as most papers) and raw (what the thesis repo prints).
+- **EER**, equal error rate, lower is better.
+CrowdFormer's frame score = its highest person score in that frame, so both models are measured
+on exactly the same frames and labels.

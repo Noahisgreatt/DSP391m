@@ -1,0 +1,23 @@
+{
+  "video": "08_038",
+  "scene": "08",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 11,
+      "event": "ABNORMAL",
+      "start_frame": 197,
+      "end_frame": 269,
+      "start_s": 7.88,
+      "end_s": 10.76
+    },
+    {
+      "track_id": 17,
+      "event": "ABNORMAL",
+      "start_frame": 198,
+      "end_frame": 240,
+      "start_s": 7.92,
+      "end_s": 9.6
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "video": "10_0074",
+  "scene": "10",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 3,
+      "event": "ABNORMAL",
+      "start_frame": 10,
+      "end_frame": 63,
+      "start_s": 0.4,
+      "end_s": 2.52
+    },
+    {
+      "track_id": 7,
+      "event": "LOITERING",
+      "start_frame": 250,
+      "end_frame": 289,
+      "start_s": 10.0,
+      "end_s": 11.56
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 257,
+      "end_frame": 397,
+      "start_s": 10.28,
+      "end_s": 15.88
+    },
+    {
+      "track_id": 27,
+      "event": "LOITERING",
+      "start_frame": 272,
+      "end_frame": 302,
+      "start_s": 10.88,
+      "end_s": 12.08
+    },
+    {
+      "track_id": 7,
+      "event": "LOITERING",
+      "start_frame": 317,
+      "end_frame": 423,
+      "start_s": 12.68,
+      "end_s": 16.92
+    },
+    {
+      "track_id": 333,
+      "event": "ABNORMAL",
+      "start_frame": 356,
+      "end_frame": 438,
+      "start_s": 14.24,
+      "end_s": 17.52
+    },
+    {
+      "track_id": 356,
+      "event": "ABNORMAL",
+      "start_frame": 391,
+      "end_frame": 454,
+      "start_s": 15.64,
+      "end_s": 18.16
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 404,
+      "end_frame": 600,
+      "start_s": 16.16,
+      "end_s": 24.0
+    },
+    {
+      "track_id": 162,
+      "event": "LOITERING",
+      "start_frame": 408,
+      "end_frame": 448,
+      "start_s": 16.32,
+      "end_s": 17.92
+    },
+    {
+      "track_id": 384,
+      "event": "ABNORMAL",
+      "start_frame": 448,
+      "end_frame": 530,
+      "start_s": 17.92,
+      "end_s": 21.2
+    },
+    {
+      "track_id": 333,
+      "event": "ABNORMAL",
+      "start_frame": 451,
+      "end_frame": 479,
+      "start_s": 18.04,
+      "end_s": 19.16
+    },
+    {
+      "track_id": 283,
+      "event": "LOITERING",
+      "start_frame": 505,
+      "end_frame": 550,
+      "start_s": 20.2,
+      "end_s": 22.0
+    },
+    {
+      "track_id": 445,
+      "event": "ABNORMAL",
+      "start_frame": 514,
+      "end_frame": 517,
+      "start_s": 20.56,
+      "end_s": 20.68
+    },
+    {
+      "track_id": 445,
+      "event": "ABNORMAL",
+      "start_frame": 536,
+      "end_frame": 538,
+      "start_s": 21.44,
+      "end_s": 21.52
+    },
+    {
+      "track_id": 445,
+      "event": "ABNORMAL",
+      "start_frame": 552,
+      "end_frame": 575,
+      "start_s": 22.08,
+      "end_s": 23.0
+    }
+  ]
+}

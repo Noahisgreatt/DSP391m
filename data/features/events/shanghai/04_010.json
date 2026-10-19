@@ -1,0 +1,15 @@
+{
+  "video": "04_010",
+  "scene": "04",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 5,
+      "event": "ABNORMAL",
+      "start_frame": 18,
+      "end_frame": 83,
+      "start_s": 0.72,
+      "end_s": 3.32
+    }
+  ]
+}

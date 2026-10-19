@@ -1,0 +1,8 @@
+# Deliberately over-sensitive thresholds, ONLY for checking that labels are drawn.
+# Do not use for results.
+detection:
+  loiter_seconds: 3
+  loiter_radius_boxes: 1.2
+  counter_angle_deg: 100
+  min_flow_consistency: 0.3
+  counter_min_seconds: 0.5

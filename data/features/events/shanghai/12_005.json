@@ -1,0 +1,87 @@
+{
+  "video": "12_005",
+  "scene": "12",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 2,
+      "event": "LOITERING",
+      "start_frame": 475,
+      "end_frame": 508,
+      "start_s": 19.0,
+      "end_s": 20.32
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 488,
+      "end_frame": 488,
+      "start_s": 19.52,
+      "end_s": 19.52
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 505,
+      "end_frame": 505,
+      "start_s": 20.2,
+      "end_s": 20.2
+    },
+    {
+      "track_id": 59,
+      "event": "ABNORMAL",
+      "start_frame": 550,
+      "end_frame": 645,
+      "start_s": 22.0,
+      "end_s": 25.8
+    },
+    {
+      "track_id": 67,
+      "event": "ABNORMAL",
+      "start_frame": 554,
+      "end_frame": 628,
+      "start_s": 22.16,
+      "end_s": 25.12
+    },
+    {
+      "track_id": 88,
+      "event": "ABNORMAL",
+      "start_frame": 639,
+      "end_frame": 844,
+      "start_s": 25.56,
+      "end_s": 33.76
+    },
+    {
+      "track_id": 83,
+      "event": "ABNORMAL",
+      "start_frame": 656,
+      "end_frame": 844,
+      "start_s": 26.24,
+      "end_s": 33.76
+    },
+    {
+      "track_id": 129,
+      "event": "ABNORMAL",
+      "start_frame": 824,
+      "end_frame": 865,
+      "start_s": 32.96,
+      "end_s": 34.6
+    },
+    {
+      "track_id": 88,
+      "event": "ABNORMAL",
+      "start_frame": 866,
+      "end_frame": 873,
+      "start_s": 34.64,
+      "end_s": 34.92
+    },
+    {
+      "track_id": 119,
+      "event": "ABNORMAL",
+      "start_frame": 910,
+      "end_frame": 1165,
+      "start_s": 36.4,
+      "end_s": 46.6
+    }
+  ]
+}

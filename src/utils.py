@@ -1,105 +1,108 @@
-"""Shared helpers: config loading, CLI overrides, paths, seeding. Nothing here is dataset-specific."""
+"""Shared helpers: config loading, frame listing, frame reading."""
 from __future__ import annotations
 
 import copy
 import json
-import os
-import random
+import re
 from pathlib import Path
-from typing import Any
 
+import cv2
 import numpy as np
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+DATASETS = ("shanghai", "manual", "other")   # other = one-off videos given to src.predict
 
 
-def load_yaml(path: str | os.PathLike) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+# ---------------------------------------------------------------- config
+def _deep_merge(base: dict, override: dict) -> dict:
+    out = copy.deepcopy(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
 
 
-def save_yaml(obj: dict, path: str | os.PathLike) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(obj, f, sort_keys=False, allow_unicode=True)
-
-
-def save_json(obj: Any, path: str | os.PathLike) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, ensure_ascii=False)
-
-
-def load_params(path: str | os.PathLike | None = None) -> dict:
-    return load_yaml(path or ROOT / "params.yaml")
-
-
-def apply_overrides(cfg: dict, overrides: list[str] | None) -> dict:
-    """Apply `a.b.c=value` overrides (value parsed as YAML) without touching the file.
-
-    Example: --set train.epochs=1 model.pretrained=false
-    """
-    cfg = copy.deepcopy(cfg)
-    for item in overrides or []:
-        key, _, raw = item.partition("=")
-        if not _:
-            raise ValueError(f"Override must look like key=value, got: {item}")
-        node = cfg
-        parts = key.split(".")
-        for p in parts[:-1]:
-            node = node.setdefault(p, {})
-        node[parts[-1]] = yaml.safe_load(raw)
+def load_config(override_path: str | None = None, base_path: str = "params.yaml") -> dict:
+    """Load params.yaml, then merge an optional override YAML on top of it."""
+    with open(base_path) as f:
+        cfg = yaml.safe_load(f) or {}
+    if override_path:
+        with open(override_path) as f:
+            cfg = _deep_merge(cfg, yaml.safe_load(f) or {})
     return cfg
 
 
-def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    try:
-        import torch
-
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-    except ImportError:
-        pass
+# ---------------------------------------------------------------- frames
+def _natural_key(p: Path):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", p.name)]
 
 
-def resolve(path: str | os.PathLike) -> Path:
-    """Paths in configs are relative to the project root."""
-    p = Path(path)
-    return p if p.is_absolute() else ROOT / p
+def list_frames(folder: str | Path) -> list[Path]:
+    """Image files in a folder, in natural order (2.jpg before 10.jpg)."""
+    folder = Path(folder)
+    return sorted((p for p in folder.iterdir() if p.suffix.lower() in IMAGE_EXTS), key=_natural_key)
 
 
-VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".mpg", ".mpeg"}
+def frames_root(cfg: dict, dataset: str) -> Path:
+    """Folder that holds one sub-folder of frames per video."""
+    if dataset == "shanghai":
+        return Path(cfg["data"]["shanghai_frames"])
+    if dataset in ("manual", "other"):
+        return Path(cfg["data"]["frames_dir"]) / dataset
+    raise ValueError(f"Unknown dataset {dataset!r}; expected one of {DATASETS}")
 
 
-def list_videos(folder: str | os.PathLike) -> list[Path]:
-    folder = resolve(folder)
-    if not folder.exists():
-        return []
-    return sorted(p for p in folder.rglob("*") if p.suffix.lower() in VIDEO_EXTS)
+def list_videos(cfg: dict, dataset: str) -> list[tuple[str, Path]]:
+    """(video_id, frame_folder) pairs for a dataset, sorted by id."""
+    root = frames_root(cfg, dataset)
+    if not root.exists():
+        raise FileNotFoundError(
+            f"{root} not found. For 'manual', run src/data/extract_frames.py first."
+        )
+    dirs = sorted((d for d in root.iterdir() if d.is_dir()), key=_natural_key)
+    return [(d.name, d) for d in dirs]
 
 
-def list_frame_dirs(folder: str | os.PathLike) -> list[Path]:
-    folder = resolve(folder)
-    if not folder.exists():
-        return []
-    return sorted(d for d in folder.iterdir() if d.is_dir())
+def read_frame(path: str | Path, resize=None) -> np.ndarray:
+    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if img is None:
+        raise IOError(f"Could not read image {path}")
+    if resize:
+        w, h = resize
+        if (img.shape[1], img.shape[0]) != (w, h):
+            img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+    return img
 
 
-def list_frames(frame_dir: str | os.PathLike) -> list[Path]:
-    d = Path(frame_dir)
-    return sorted(p for p in d.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
+def frame_step(cfg: dict, dataset: str) -> int:
+    """Manual videos were already sampled during extraction, so don't sample them twice."""
+    return int(cfg["frames"]["step"]) if dataset == "shanghai" else 1
 
 
-def split_of(video_id: str, params: dict, dataset: str) -> str:
-    """Return 'train' or 'test'. Video ids carry a prefix written by extract_frames.py."""
-    return "test" if video_id.startswith("test__") else "train"
+def video_frames(cfg: dict, dataset: str, folder: str | Path) -> list[Path]:
+    return list_frames(folder)[:: frame_step(cfg, dataset)]
 
 
-def scene_of(video_id: str) -> str:
-    """ShanghaiTech ids look like 01_0014 -> scene 01. Other datasets fall back to 'all'."""
-    base = video_id.split("__", 1)[-1]
-    head = base.split("_", 1)[0]
-    return head if head.isdigit() else "all"
+def video_fps(cfg: dict, dataset: str, video_id: str) -> float:
+    """Frames per second of the frames the pipeline actually uses."""
+    if dataset in ("manual", "other"):
+        meta = frames_root(cfg, dataset) / video_id / "meta.json"
+        if meta.exists():
+            fps = json.loads(meta.read_text()).get("fps")
+            if fps:
+                return float(fps)
+    fps = cfg["detection"]["fps"].get(dataset, cfg["detection"]["fps"]["manual"])
+    return float(fps) / frame_step(cfg, dataset)
+
+
+def features_path(cfg: dict, method: str, dataset: str, video_id: str) -> Path:
+    return Path(cfg["data"]["features_dir"]) / method / dataset / f"{video_id}.npz"
+
+
+def results_dir(run: str | Path) -> Path:
+    """runs/<model>/<run_id>  ->  results/<model>/<run_id>  (metrics, scores, result videos)."""
+    run = Path(run)
+    return Path("results") / run.parent.name / run.name

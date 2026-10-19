@@ -10,12 +10,12 @@ stages:
       nfiles: 45
     - path: src/data/extract_frames.py
       hash: md5
-      md5: 330eaf24e2432c4c4cd4b8c5920cb2b0
-      size: 3067
+      md5: de1cadb7a6b5617f76c120da825b8ada
+      size: 3158
     - path: src/utils.py
       hash: md5
-      md5: 5e8c336f86e32bf8c692e52eb70e52f0
-      size: 2818
+      md5: 43e0823615dae31126c0dc7100af1488
+      size: 3975
     params:
       params.yaml:
         frames:
@@ -49,16 +49,16 @@ stages:
       nfiles: 173336
     - path: src/features/direction.py
       hash: md5
-      md5: 6ffe4e70723066310fae2892ecc0c187
-      size: 3507
+      md5: a55c7239d05e555529a016145289b35b
+      size: 5056
     - path: src/features/optical_flow.py
       hash: md5
-      md5: 7a9e5d213636b21038665af025658c67
-      size: 4844
+      md5: 3fc7828ade74dd326e1b608427f3fb51
+      size: 5077
     - path: src/utils.py
       hash: md5
-      md5: 5e8c336f86e32bf8c692e52eb70e52f0
-      size: 2818
+      md5: 43e0823615dae31126c0dc7100af1488
+      size: 3975
     params:
       params.yaml:
         direction:
@@ -110,16 +110,16 @@ stages:
       nfiles: 15014
     - path: src/features/direction.py
       hash: md5
-      md5: 6ffe4e70723066310fae2892ecc0c187
-      size: 3507
+      md5: a55c7239d05e555529a016145289b35b
+      size: 5056
     - path: src/features/optical_flow.py
       hash: md5
-      md5: 7a9e5d213636b21038665af025658c67
-      size: 4844
+      md5: 3fc7828ade74dd326e1b608427f3fb51
+      size: 5077
     - path: src/utils.py
       hash: md5
-      md5: 5e8c336f86e32bf8c692e52eb70e52f0
-      size: 2818
+      md5: 43e0823615dae31126c0dc7100af1488
+      size: 3975
     params:
       params.yaml:
         direction:
@@ -160,4 +160,196 @@ stages:
       hash: md5
       md5: 5948cab7f34d59977dce3f66f8e3db0e.dir
       size: 2087324
+      nfiles: 45
+  track_shanghai:
+    cmd: python -m src.features.tracking --dataset shanghai
+    deps:
+    - path: data/raw/SHANGHAI/SHANGHAI_TRAIN/frames
+      hash: md5
+      md5: 327a7d972c90952f56616b5ba5fcf695.dir
+      size: 11685078974
+      nfiles: 173336
+    - path: src/features/direction.py
+      hash: md5
+      md5: a55c7239d05e555529a016145289b35b
+      size: 5056
+    - path: src/features/tracking.py
+      hash: md5
+      md5: 7cb0400d0d17fe20efc6187a35861973
+      size: 4062
+    - path: src/utils.py
+      hash: md5
+      md5: 43e0823615dae31126c0dc7100af1488
+      size: 3975
+    params:
+      params.yaml:
+        frames:
+          resize:
+          - 640
+          - 360
+          step: 1
+          jpg_quality: 95
+          video_exts:
+          - .mp4
+          - .avi
+          - .mov
+          - .mkv
+          - .MP4
+          - .AVI
+          - .MOV
+          - .MKV
+        tracking:
+          model: yolo11s.pt
+          conf: 0.25
+          imgsz: 960
+          tracker: bytetrack.yaml
+          device:
+          window: 8
+          smooth: 5
+          min_speed: 0.4
+    outs:
+    - path: data/features/tracking/shanghai
+      hash: md5
+      md5: 7633729620e20342d1eceb7f83e1e80f.dir
+      size: 18684721
+      nfiles: 238
+  track_manual:
+    cmd: python -m src.features.tracking --dataset manual
+    deps:
+    - path: data/interim/frames/manual
+      hash: md5
+      md5: 26822f494eff192f7f89e3cfe6186204.dir
+      size: 1829881747
+      nfiles: 15014
+    - path: src/features/direction.py
+      hash: md5
+      md5: a55c7239d05e555529a016145289b35b
+      size: 5056
+    - path: src/features/tracking.py
+      hash: md5
+      md5: 7cb0400d0d17fe20efc6187a35861973
+      size: 4062
+    - path: src/utils.py
+      hash: md5
+      md5: e5042860693b06227b89d3e7aa1ec132
+      size: 3628
+    params:
+      params.yaml:
+        frames:
+          resize:
+          - 640
+          - 360
+          step: 1
+          jpg_quality: 95
+          video_exts:
+          - .mp4
+          - .avi
+          - .mov
+          - .mkv
+          - .MP4
+          - .AVI
+          - .MOV
+          - .MKV
+        tracking:
+          model: yolo11s.pt
+          conf: 0.25
+          imgsz: 960
+          tracker: bytetrack.yaml
+          device:
+          window: 8
+          smooth: 5
+          min_speed: 0.4
+    outs:
+    - path: data/features/tracking/manual
+      hash: md5
+      md5: eadc7c007c2cd51163a0ac50488164a0.dir
+      size: 3414441
+      nfiles: 45
+  detect_shanghai:
+    cmd: python -m src.detect --dataset shanghai
+    deps:
+    - path: data/features/farneback/shanghai
+      hash: md5
+      md5: 3ecb7b2fc7fb20bc6f8e29ce41c4c738.dir
+      size: 22261740
+      nfiles: 238
+    - path: data/features/tracking/shanghai
+      hash: md5
+      md5: 7633729620e20342d1eceb7f83e1e80f.dir
+      size: 18684721
+      nfiles: 238
+    - path: src/detect.py
+      hash: md5
+      md5: abddb916bc2014477a3dbd88dfed711f
+      size: 8585
+    params:
+      params.yaml:
+        detection:
+          fps:
+            shanghai: 25
+            manual: 30
+          scene_from:
+            shanghai: prefix
+            manual: video
+          min_cell_samples: 30
+          counter_angle_deg: 120
+          min_flow_consistency: 0.35
+          counter_min_seconds: 0.8
+          loiter_seconds: 10
+          loiter_radius_boxes: 1.0
+          min_coverage: 0.7
+    outs:
+    - path: data/features/events/shanghai
+      hash: md5
+      md5: da33bca265da9ae8fab462291116f6ff.dir
+      size: 240581
+      nfiles: 476
+    - path: data/features/normal_maps/shanghai
+      hash: md5
+      md5: f7ff0ad2c4159e64ce14c1336530fb5e.dir
+      size: 20201
+      nfiles: 13
+  detect_manual:
+    cmd: python -m src.detect --dataset manual
+    deps:
+    - path: data/features/farneback/manual
+      hash: md5
+      md5: 5948cab7f34d59977dce3f66f8e3db0e.dir
+      size: 2087324
+      nfiles: 45
+    - path: data/features/tracking/manual
+      hash: md5
+      md5: eadc7c007c2cd51163a0ac50488164a0.dir
+      size: 3414441
+      nfiles: 45
+    - path: src/detect.py
+      hash: md5
+      md5: abddb916bc2014477a3dbd88dfed711f
+      size: 8585
+    params:
+      params.yaml:
+        detection:
+          fps:
+            shanghai: 25
+            manual: 30
+          scene_from:
+            shanghai: prefix
+            manual: video
+          min_cell_samples: 30
+          counter_angle_deg: 120
+          min_flow_consistency: 0.35
+          counter_min_seconds: 0.8
+          loiter_seconds: 10
+          loiter_radius_boxes: 1.0
+          min_coverage: 0.7
+    outs:
+    - path: data/features/events/manual
+      hash: md5
+      md5: 0f72f2834fe9675814fc5790c610af47.dir
+      size: 35393
+      nfiles: 90
+    - path: data/features/normal_maps/manual
+      hash: md5
+      md5: 7a46335e2b0715c65c75066e44333a3c.dir
+      size: 50313
       nfiles: 45

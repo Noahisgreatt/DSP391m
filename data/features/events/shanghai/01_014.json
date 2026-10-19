@@ -1,0 +1,31 @@
+{
+  "video": "01_014",
+  "scene": "01",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 1,
+      "event": "ABNORMAL",
+      "start_frame": 4,
+      "end_frame": 117,
+      "start_s": 0.16,
+      "end_s": 4.68
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 454,
+      "end_frame": 591,
+      "start_s": 18.16,
+      "end_s": 23.64
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 606,
+      "end_frame": 606,
+      "start_s": 24.24,
+      "end_s": 24.24
+    }
+  ]
+}

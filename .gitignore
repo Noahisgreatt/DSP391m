@@ -1,3 +1,7 @@
 .vscode/
 outputs/
 models/
+runs/
+results/
+*.pt
+*.pth

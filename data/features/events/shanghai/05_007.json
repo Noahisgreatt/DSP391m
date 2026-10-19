@@ -1,0 +1,15 @@
+{
+  "video": "05_007",
+  "scene": "05",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 2,
+      "event": "LOITERING",
+      "start_frame": 250,
+      "end_frame": 297,
+      "start_s": 10.0,
+      "end_s": 11.88
+    }
+  ]
+}

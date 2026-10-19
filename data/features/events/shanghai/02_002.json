@@ -1,0 +1,31 @@
+{
+  "video": "02_002",
+  "scene": "02",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 422,
+      "end_frame": 584,
+      "start_s": 16.88,
+      "end_s": 23.36
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 599,
+      "end_frame": 611,
+      "start_s": 23.96,
+      "end_s": 24.44
+    },
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 627,
+      "end_frame": 636,
+      "start_s": 25.08,
+      "end_s": 25.44
+    }
+  ]
+}

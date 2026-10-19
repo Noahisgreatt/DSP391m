@@ -1,0 +1,55 @@
+{
+  "video": "01_007",
+  "scene": "01",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 49,
+      "event": "ABNORMAL",
+      "start_frame": 259,
+      "end_frame": 336,
+      "start_s": 10.36,
+      "end_s": 13.44
+    },
+    {
+      "track_id": 67,
+      "event": "ABNORMAL",
+      "start_frame": 276,
+      "end_frame": 296,
+      "start_s": 11.04,
+      "end_s": 11.84
+    },
+    {
+      "track_id": 122,
+      "event": "ABNORMAL",
+      "start_frame": 296,
+      "end_frame": 430,
+      "start_s": 11.84,
+      "end_s": 17.2
+    },
+    {
+      "track_id": 128,
+      "event": "ABNORMAL",
+      "start_frame": 317,
+      "end_frame": 416,
+      "start_s": 12.68,
+      "end_s": 16.64
+    },
+    {
+      "track_id": 152,
+      "event": "ABNORMAL",
+      "start_frame": 423,
+      "end_frame": 577,
+      "start_s": 16.92,
+      "end_s": 23.08
+    },
+    {
+      "track_id": 122,
+      "event": "ABNORMAL",
+      "start_frame": 454,
+      "end_frame": 460,
+      "start_s": 18.16,
+      "end_s": 18.4
+    }
+  ]
+}

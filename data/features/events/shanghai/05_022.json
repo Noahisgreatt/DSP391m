@@ -1,0 +1,39 @@
+{
+  "video": "05_022",
+  "scene": "05",
+  "fps": 25.0,
+  "events": [
+    {
+      "track_id": 1,
+      "event": "LOITERING",
+      "start_frame": 494,
+      "end_frame": 732,
+      "start_s": 19.76,
+      "end_s": 29.28
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 559,
+      "end_frame": 679,
+      "start_s": 22.36,
+      "end_s": 27.16
+    },
+    {
+      "track_id": 49,
+      "event": "LOITERING",
+      "start_frame": 582,
+      "end_frame": 730,
+      "start_s": 23.28,
+      "end_s": 29.2
+    },
+    {
+      "track_id": 3,
+      "event": "LOITERING",
+      "start_frame": 696,
+      "end_frame": 696,
+      "start_s": 27.84,
+      "end_s": 27.84
+    }
+  ]
+}

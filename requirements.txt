@@ -13,3 +13,5 @@ matplotlib>=3.8
 gdown>=5.1
 kaggle>=1.6
 dvc>=3.50
+ultralytics
+ultralytics
