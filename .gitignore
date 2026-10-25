@@ -4,14 +4,16 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# ---- data: raw data is versioned by DVC (*.dvc files), the rest is re-created by dvc repro
+# ---- data: raw data is versioned by DVC (*.dvc files); the rest is re-created by dvc repro
 data/raw/_kaggle_tmp/
 data/raw/_download/
 data/processed/
 data/features/
+data/external/
 
 # ---- outputs: small JSON / CSV results ARE committed (for `dvc metrics diff`); big files are not
 outputs/training/*/checkpoints/
+outputs/training/*/log.csv
 outputs/training/*_smoke/
 outputs/evaluation/*_smoke/
 outputs/evaluation/*/scores/
@@ -22,12 +24,9 @@ outputs/demo/
 *.pt
 *.tmp
 
-# ---- third-party code: fetched by `python third_party/fetch.py` (pinned commits + sha256),
-#      not committed, because their licences don't allow republishing
+# ---- downloaded: pretrained weights (python -m src.models.nets download ...) and third-party code
+#      (python third_party/fetch.py; not republished, see third_party/README.md)
+weights/
 third_party/ASTT/
 third_party/AIVAD/
 third_party/AlphaPose/
-
-# ---- pretrained network weights and external downloads (python -m src.models.aivad.weights)
-weights/
-data/external/

@@ -25,10 +25,35 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 
-from api import metrics as M
-from src.config import load_config
+from src.utils import load_config
+
+
+class M:
+    """Prometheus metrics (scraped at /metrics, shown in Grafana). Service health: requests,
+    errors, latency. Model behaviour: time per step, score distribution, share of abnormal frames,
+    events, unusual objects: if these drift, incoming videos no longer look like the training data."""
+    REQUESTS = Counter("vad_api_requests_total", "HTTP requests", ["endpoint", "status"])
+    LATENCY = Histogram("vad_api_request_seconds", "HTTP request duration", ["endpoint"],
+                        buckets=(0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600))
+    IN_PROGRESS = Gauge("vad_api_requests_in_progress", "Requests being processed")
+
+    STEP_SECONDS = Histogram("vad_pipeline_step_seconds", "Time per pipeline step", ["step"],
+                             buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300))
+    VIDEOS = Counter("vad_videos_analyzed_total", "Videos analyzed", ["model"])
+    FRAMES = Counter("vad_frames_processed_total", "Frames processed", ["model"])
+    FRAME_SCORE = Histogram("vad_frame_anomaly_score", "Frame anomaly score (models 1-2: MSE, 3-4: AI-VAD score)",
+                            ["model"], buckets=(0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 1, 2, 3, 5, 10))
+    ABNORMAL_RATIO = Histogram("vad_abnormal_frame_ratio", "Share of frames above the threshold per video",
+                               ["model"], buckets=(0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1))
+    EVENTS = Counter("vad_behavior_events_total", "Behavior events detected", ["event"])
+    PEOPLE = Histogram("vad_people_per_video", "People tracked per video",
+                       buckets=(0, 1, 2, 5, 10, 20, 50, 100, 200))
+    MODEL = Info("vad_model", "Model being served")
+    THRESHOLD = Gauge("vad_model_threshold", "Frame threshold (EER) in use, in the model's score units")
+    UNUSUAL = Counter("vad_unusual_objects_total", "Objects models 3/4 found unusual, by attribute", ["attribute"])
+
 
 CFG = load_config("configs/api.yaml")["api"]
 WORK = Path(CFG["work_dir"])
@@ -39,7 +64,7 @@ lock = threading.Lock()                      # one video at a time on the GPU
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from src.inference.analyze import Analyzer
+    from src.demo import Analyzer
     state["analyzer"] = Analyzer(os.environ.get("VAD_MODEL") or CFG["model"])
     info = state["analyzer"].info()
     M.MODEL.info({k: str(v) for k, v in info.items()})
@@ -92,7 +117,7 @@ def analyze(file: UploadFile = File(...), render: bool = True):
         raise HTTPException(413, f"file larger than {CFG['max_upload_mb']} MB")
     try:
         with lock:
-            r = state["analyzer"].run(src, work, render=render)
+            r = state["analyzer"].run(src, work, draw=render)
     except Exception as e:
         raise HTTPException(422, f"could not analyze the video: {e}")
     finally:

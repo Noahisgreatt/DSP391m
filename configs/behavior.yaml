@@ -3,7 +3,7 @@
 
 frame_size: [640, 360]      # [width, height] all behavior steps work in (boxes, flow, videos)
 
-optical_flow:               # src/behavior/optical_flow.py (Farneback)
+optical_flow:               # Farneback (classical, no network)
   # Learns each camera's normal walking direction, so it runs on NORMAL (training) videos only.
   farneback: {pyr_scale: 0.5, levels: 3, winsize: 15, iterations: 3, poly_n: 5, poly_sigma: 1.2}
   grid: [8, 8]              # [rows, cols] of cells over the frame
@@ -12,17 +12,16 @@ optical_flow:               # src/behavior/optical_flow.py (Farneback)
   min_moving_fraction: 0.02 # a cell needs this share of moving pixels to get a direction
   min_cell_samples: 30      # a cell needs this many moving frames to have a "normal" direction
 
-tracking:                   # src/behavior/tracking.py (YOLO + ByteTrack)
-  model: yolo11s.pt         # n = fastest, s = balanced, m/l = more accurate, slower
-  conf: 0.25
-  imgsz: 960                # larger finds small / far people better
-  tracker: bytetrack.yaml
-  device: null              # null = GPU if available
+tracking:                   # src/behavior.py: our Keypoint R-CNN finds people, our tracker follows them
+  detector_conf: 0.5        # minimum detection score for a person
+  detector_size: 800        # shorter image side the detector works at (larger = small people, slower)
+  match_iou: 0.3            # a detection continues a track if their boxes overlap this much
+  max_lost: 30              # frames a track may be missing before it ends
   window: 8                 # velocity = box-centre movement over this many frames
   smooth: 5                 # moving average over this many frames (removes box jitter)
   min_speed: 0.4            # px/frame; slower = standing
 
-counter_flow:               # src/behavior/counter_flow.py
+counter_flow:
   crowd_k: 6                # compare with this many nearest moving people
   crowd_radius_boxes: 8     # ...within this many body heights
   min_crowd: 2              # need at least this many neighbours to judge "the crowd"
@@ -33,7 +32,7 @@ counter_flow:               # src/behavior/counter_flow.py
   fast_ratio: 2.0           # ...and at least this many times the neighbours' speed
   min_seconds: 0.8          # must last this long to be flagged
 
-loitering:                  # src/behavior/loitering.py
+loitering:
   seconds: 10               # real systems often use 30 s+; ShanghaiTech clips are short
   radius_boxes: 1.0         # "small area" = this many body heights around one spot
   min_coverage: 0.7         # person visible for at least this share of the window

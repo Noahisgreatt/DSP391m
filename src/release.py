@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from src.config import git_commit, load_config
+from src.utils import git_commit, load_config
 
 MODELS = ("astt_baseline", "astt_improved", "aivad", "aivad_lite")
 

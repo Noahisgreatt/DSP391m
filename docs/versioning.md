@@ -19,7 +19,7 @@ A version = one git tag. The tag pins the code, `dvc.lock` pins the exact data a
   epochs, final loss, and the test metrics (AUC micro / norm / macro, EER, threshold, speed)
 - **behavior**: event counts and the rules' frame-level result
 - **comparison**: the table of all models (if made)
-- **software**: Python, PyTorch, CUDA, GPU, timm, ultralytics, DVC versions
+- **software**: Python, PyTorch, torchvision, CUDA, GPU, DVC versions
 
 ## Making a version (example: v1.0)
 ```bash
@@ -30,8 +30,9 @@ git commit -m "release v1.0"
 git tag -a v1.0 -m "data + model 1"
 git push --follow-tags && dvc push
 ```
-v2.0: `dvc repro train@astt_improved evaluate@astt_improved`, `python -m src.evaluation.compare`,
-then the same release steps with `v2.0`. v3.0 / v4.0 likewise with `fit@aivad` / `fit@aivad_lite`;
+v2.0: `dvc repro train@astt_improved evaluate@astt_improved`, `python -m src.evaluate --compare`,
+then the same release steps with `v2.0`. v3.0 / v4.0 likewise with `train@aivad` / `train@aivad_lite`
+(for AI-VAD, "training" = extracting the attributes and fitting the density models);
 from v4.0 on, `dvc repro compare benchmark` covers everything.
 
 ## Comparing versions

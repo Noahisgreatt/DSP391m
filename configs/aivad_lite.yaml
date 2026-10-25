@@ -1,25 +1,20 @@
-# Model 4: AI-VAD Lite (ours). Same idea and scoring as model 3, lighter networks, plus
-# track-based attributes. Every change from configs/aivad.yaml is marked [CHANGE].
-#   python -m src.training.train       --config configs/aivad_lite.yaml
-#   python -m src.evaluation.evaluate  --config configs/aivad_lite.yaml
+# Model 4: AI-VAD Lite (ours). Same attributes and scoring as model 3, lighter networks and three
+# additions for our target behaviours. Every change from configs/aivad.yaml is marked [CHANGE].
+# Weights: python -m src.models.nets download aivad_lite
+#   python -m src.train    --config configs/aivad_lite.yaml
+#   python -m src.evaluate --config configs/aivad_lite.yaml
 
 model:
   name: aivad_lite
   family: aivad
   features: extract
-  objects: yolo_pose           # [CHANGE] YOLO11x-pose: boxes AND 17 keypoints in ONE network
-                               #          (replaces Mask R-CNN 44.4M + AlphaPose FastPose)
-  yolo_conf: 0.5
-  yolo_imgsz: 960
-  track: true                  # [CHANGE] ByteTrack ids, used by track_smoothing below
-  pose: yolo                   # [CHANGE] keypoints from the same YOLO pass
-  flow: raft                   # [CHANGE] RAFT 5.3M (torchvision) instead of FlowNet2 162.5M
-  raft_size: [512, 288]        # [CHANGE] flow at 512x288 instead of 1024x640
-  raft_iters: 12
-  appearance: none             # [CHANGE] CLIP dropped: AI-VAD's ShanghaiTech score doesn't use it
-
-weights:
-  yolo_pose: yolo11x-pose.pt   # downloaded automatically by ultralytics
+  objects: keypointrcnn        # [CHANGE] Keypoint R-CNN: people AND 17 keypoints in one pass
+                               #          (replaces Faster R-CNN + AlphaPose: two networks)
+  detector_conf: 0.5
+  pose: keypointrcnn           # [CHANGE] keypoints from the same pass
+  flow: flownetc               # [CHANGE] only FlowNet2's first network (FlowNetC, same weights)
+  flow_size: [512, 320]        # [CHANGE] half the resolution
+  appearance: none             # [CHANGE] no CLIP (not part of the ShanghaiTech score anyway)
 
 scoring:
   attributes: [velocity, pose, relative_velocity]   # [CHANGE] + motion relative to the crowd
@@ -29,9 +24,5 @@ scoring:
   per_scene: true              # [CHANGE] one model of "normal" per camera (13 cameras differ)
   track_smoothing: 5           # [CHANGE] average a person's score over their last 5 frames
 
-eval:
-  batch_size: 1
-
-train:
-  num_workers: 0
-  amp: false
+eval: {batch_size: 1}
+train: {num_workers: 0, amp: false}

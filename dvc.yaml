@@ -1,291 +1,142 @@
-# DVC pipeline. Steps run in this order (dvc dag shows the graph):
-#   1 data      prepare_shanghaitech, prepare_manual, split
-#   2 behavior  optical_flow_*, tracking_*, behavior_*       (loitering / counter-flow rules)
-#   3 models    train@astt_baseline, train@astt_improved      (models 1, 2: neural nets)
-#               fit@aivad, fit@aivad_lite                     (models 3, 4: attributes + density)
-#   4 evaluate  evaluate@<model> for all four
-#   5 compare   all models vs. the rules, + speed / size benchmark
-# Run everything: dvc repro        One step: dvc repro train@astt_baseline
-# Versions: docs/versioning.md (v1 = data + model 1 ... v4 = all four models compared).
-#
-# cache: false = too big or re-creatable, kept out of the DVC remote.
-# Small JSON / CSV results are committed to git, so `dvc metrics diff v1.0 v2.0` works.
+# DVC pipeline: `dvc dag` draws it, `dvc repro <stage>` runs a stage + everything it needs.
+#   1 data      prepare_shanghaitech, prepare_manual, split                  (src/data.py)
+#   2 behavior  tracking_*, optical_flow_*, behavior_*                        (src/behavior.py)
+#   3 models    train@<model> for all four                                    (src/train.py)
+#   4 evaluate  evaluate@<model>, compare, benchmark                          (src/evaluate.py)
+# Versions (git tag + releases/<version>.json): docs/versioning.md.
+# cache: false = big but re-creatable, kept off the DVC remote. Small JSON / CSV results are
+# committed to git, so `dvc metrics diff v1.0 v2.0` works.
 
 stages:
   # ------------------------------------------------------------------ 1. data
   prepare_shanghaitech:
-    cmd: python -m src.data.prepare_shanghaitech
-    deps:
-      - data/raw/shanghaitech                # train.zip + test.zip (dvc add)
-      - src/data/prepare_shanghaitech.py
+    cmd: python -m src.data prepare
+    deps: [data/raw/shanghaitech, src/data.py]
     params:
-      - configs/data.yaml:
-          - shanghaitech.kaggle_train
-          - shanghaitech.kaggle_test
+      - configs/data.yaml: [shanghaitech.kaggle_train, shanghaitech.kaggle_test]
     outs:
-      - data/processed/shanghaitech:
-          cache: false                       # re-created from the zips
+      - data/processed/shanghaitech: {cache: false}
     metrics:
-      - data/metadata/shanghaitech.json:    # data card (counts, source, raw hash)
-          cache: false
+      - data/metadata/shanghaitech.json: {cache: false}      # data card
 
   prepare_manual:
-    cmd: python -m src.data.prepare_manual
-    deps:
-      - data/raw/manual
-      - src/data/prepare_manual.py
+    cmd: python -m src.data manual
+    deps: [data/raw/manual, src/data.py]
     params:
-      - configs/data.yaml:
-          - frames
+      - configs/data.yaml: [frames]
     outs:
-      - data/processed/manual:
-          cache: false
+      - data/processed/manual: {cache: false}
     metrics:
-      - data/metadata/manual.json:
-          cache: false
+      - data/metadata/manual.json: {cache: false}
 
   split:
-    cmd: python -m src.data.split
-    deps:
-      - data/metadata/shanghaitech.json      # changes exactly when the data changes
-      - src/data/split.py
+    cmd: python -m src.data split
+    deps: [data/metadata/shanghaitech.json, src/data.py]   # the card changes exactly when the data does
     params:
-      - configs/data.yaml:
-          - shanghaitech.val_fraction
-          - shanghaitech.seed
+      - configs/data.yaml: [shanghaitech.val_fraction, shanghaitech.seed]
     outs:
-      - data/metadata/split.json:
-          cache: false
+      - data/metadata/split.json: {cache: false}
 
   # ------------------------------------------------------------------ 2. behavior (no training)
-  optical_flow_shanghaitech:                 # normal direction per camera, from TRAIN videos
-    cmd: python -m src.behavior.optical_flow --dataset shanghaitech
-    deps:
-      - data/metadata/split.json
-      - src/behavior/optical_flow.py
-    params:
-      - configs/behavior.yaml:
-          - frame_size
-          - optical_flow
-    outs:
-      - data/features/optical_flow/shanghaitech:
-          cache: false
-      - data/features/normal_maps/shanghaitech:
-          cache: false
+  tracking:
+    foreach: [shanghaitech, manual]
+    do:
+      cmd: python -m src.behavior track --dataset ${item}
+      deps: [data/metadata/split.json, "data/metadata/${item}.json", src/behavior.py, src/models/nets.py]
+      params:
+        - configs/behavior.yaml: [frame_size, tracking]
+      outs:
+        - data/features/tracking/${item}:
+            cache: false
 
-  optical_flow_manual:
-    cmd: python -m src.behavior.optical_flow --dataset manual
-    deps:
-      - data/metadata/manual.json
-      - src/behavior/optical_flow.py
-    params:
-      - configs/behavior.yaml:
-          - frame_size
-          - optical_flow
-    outs:
-      - data/features/optical_flow/manual:
-          cache: false
-      - data/features/normal_maps/manual:
-          cache: false
+  optical_flow:
+    foreach: [shanghaitech, manual]
+    do:
+      cmd: python -m src.behavior flow --dataset ${item}
+      deps: [data/metadata/split.json, "data/metadata/${item}.json", src/behavior.py]
+      params:
+        - configs/behavior.yaml: [frame_size, optical_flow]
+      outs:
+        - data/features/optical_flow/${item}: {cache: false}
+        - data/features/normal_maps/${item}: {cache: false}
 
-  tracking_shanghaitech:                     # people in the TEST videos
-    cmd: python -m src.behavior.tracking --dataset shanghaitech
-    deps:
-      - data/metadata/split.json
-      - src/behavior/tracking.py
-    params:
-      - configs/behavior.yaml:
-          - frame_size
-          - tracking
-    outs:
-      - data/features/tracking/shanghaitech:
-          cache: false
-
-  tracking_manual:
-    cmd: python -m src.behavior.tracking --dataset manual
-    deps:
-      - data/metadata/manual.json
-      - src/behavior/tracking.py
-    params:
-      - configs/behavior.yaml:
-          - frame_size
-          - tracking
-    outs:
-      - data/features/tracking/manual:
-          cache: false
-
-  behavior_shanghaitech:
-    cmd: python -m src.behavior.detect --dataset shanghaitech
-    deps:
-      - data/features/tracking/shanghaitech
-      - data/features/normal_maps/shanghaitech
-      - src/behavior/detect.py
-      - src/behavior/counter_flow.py
-      - src/behavior/loitering.py
-    params:
-      - configs/behavior.yaml:
-          - counter_flow
-          - loitering
-    outs:
-      - outputs/behavior/shanghaitech/events:
-          cache: false
-    metrics:
-      - outputs/behavior/shanghaitech/metrics.json:
-          cache: false
-
-  behavior_manual:
-    cmd: python -m src.behavior.detect --dataset manual
-    deps:
-      - data/features/tracking/manual
-      - data/features/normal_maps/manual
-      - src/behavior/detect.py
-      - src/behavior/counter_flow.py
-      - src/behavior/loitering.py
-    params:
-      - configs/behavior.yaml:
-          - counter_flow
-          - loitering
-    outs:
-      - outputs/behavior/manual/events:
-          cache: false
-    metrics:
-      - outputs/behavior/manual/metrics.json:
-          cache: false
+  behavior:
+    foreach: [shanghaitech, manual]
+    do:
+      cmd: python -m src.behavior detect --dataset ${item}
+      deps: ["data/features/tracking/${item}", "data/features/normal_maps/${item}", src/behavior.py]
+      params:
+        - configs/behavior.yaml: [counter_flow, loitering]
+      outs:
+        - outputs/behavior/${item}/events: {cache: false}
+      metrics:
+        - outputs/behavior/${item}/metrics.json: {cache: false}
 
   # ------------------------------------------------------------------ 3. models
-  # Long runs (~6 h/epoch for model 1 on an RTX 4050). Interrupted? Run the same command again:
-  # it continues from the last checkpoint (persist: true keeps the files between runs).
-  train:                                     # models 1, 2
-    foreach: [astt_baseline, astt_improved]
+  # Long runs. Stopped? Run the same command again: it continues (persist keeps the files).
+  train:
+    foreach:
+      astt_baseline: {code: src/models/astt.py}
+      astt_improved: {code: src/models/astt.py}
+      aivad: {code: src/models/aivad.py}
+      aivad_lite: {code: src/models/aivad.py}
     do:
-      cmd: python -m src.training.train --config configs/${item}.yaml
-      deps:
-        - data/metadata/shanghaitech.json
-        - data/metadata/split.json
-        - src/models/${item}.py
-        - src/training/train.py
-        - src/data/dataset.py
-        - third_party/ASTT
+      cmd: python -m src.train --config configs/${key}.yaml
+      deps: [data/metadata/shanghaitech.json, data/metadata/split.json, "${item.code}", src/models/nets.py, src/train.py]
       params:
-        - configs/${item}.yaml:
-            - model
-            - input
-            - train
+        - configs/${key}.yaml:                                       # every setting of that model
       outs:
-        - outputs/training/${item}/model.pth:      # the trained weights (pushed to the remote)
-            persist: true
-        - outputs/training/${item}/checkpoints:    # for continuing only
-            cache: false
-            persist: true
-        - outputs/training/${item}/run.json:       # config, git commit, data version, params
-            cache: false
-            persist: true
+        - outputs/training/${key}/model.pth: {persist: true}          # trained weights / density model
+        - outputs/training/${key}/run.json: {cache: false, persist: true}
       metrics:
-        - outputs/training/${item}/metrics.json:
-            cache: false
-            persist: true
-      plots:
-        - outputs/training/${item}/log.csv:
-            cache: false
-            persist: true
-
-  fit:                                       # models 3, 4: "training" = attributes of the
-    foreach: [aivad, aivad_lite]             # 330 normal videos + density fit (no gradients)
-    do:
-      cmd: python -m src.training.train --config configs/${item}.yaml
-      deps:
-        - data/metadata/shanghaitech.json
-        - data/metadata/split.json
-        - src/models/aivad
-        - third_party/AIVAD
-      params:
-        - configs/${item}.yaml:
-            - model
-            - scoring
-      outs:
-        - outputs/training/${item}/model.pth:      # density estimators + calibration
-            persist: true
-        - data/features/${item}/train:             # attributes per video (cache to continue)
-            cache: false
-            persist: true
-        - outputs/training/${item}/run.json:
-            cache: false
-            persist: true
-      metrics:
-        - outputs/training/${item}/metrics.json:
-            cache: false
-            persist: true
+        - outputs/training/${key}/metrics.json: {cache: false, persist: true}
 
   # ------------------------------------------------------------------ 4. evaluation
   evaluate:
-    foreach:                                 # model -> its own code (re-evaluate when it changes)
-      astt_baseline: {code: src/models/astt_baseline.py}
-      astt_improved: {code: src/models/astt_improved.py}
-      aivad: {code: src/models/aivad}
-      aivad_lite: {code: src/models/aivad}
+    foreach:
+      astt_baseline: {code: src/models/astt.py}
+      astt_improved: {code: src/models/astt.py}
+      aivad: {code: src/models/aivad.py}
+      aivad_lite: {code: src/models/aivad.py}
     do:
-      cmd: python -m src.evaluation.evaluate --config configs/${key}.yaml
-      deps:
-        - outputs/training/${key}/model.pth
-        - data/metadata/split.json
-        - ${item.code}
-        - src/evaluation/evaluate.py
-        - src/evaluation/scoring.py
-        - src/evaluation/metrics.py
-      params:
-        - configs/${key}.yaml:
-            - eval
+      cmd: python -m src.evaluate --config configs/${key}.yaml
+      deps: ["outputs/training/${key}/model.pth", data/metadata/split.json, "${item.code}", src/evaluate.py]
       outs:
-        - outputs/evaluation/${key}/scores:
-            cache: false
+        - outputs/evaluation/${key}/scores: {cache: false}
       metrics:
-        - outputs/evaluation/${key}/metrics.json:
-            cache: false
+        - outputs/evaluation/${key}/metrics.json: {cache: false}
       plots:
-        - outputs/evaluation/${key}/roc.csv:
-            cache: false
+        - outputs/evaluation/${key}/roc.csv: {cache: false}
 
-  # ------------------------------------------------------------------ 5. comparison
   compare:
-    cmd: python -m src.evaluation.compare
+    cmd: python -m src.evaluate --compare
     deps:
       - outputs/evaluation/astt_baseline/metrics.json
       - outputs/evaluation/astt_improved/metrics.json
       - outputs/evaluation/aivad/metrics.json
       - outputs/evaluation/aivad_lite/metrics.json
       - outputs/behavior/shanghaitech/metrics.json
-      - src/evaluation/compare.py
+      - src/evaluate.py
     outs:
-      - outputs/comparison/comparison.md:
-          cache: false
-      - outputs/comparison/roc.png:
-          cache: false
+      - outputs/comparison/comparison.md: {cache: false}
+      - outputs/comparison/roc.png: {cache: false}
     metrics:
-      - outputs/comparison/comparison.json:
-          cache: false
+      - outputs/comparison/comparison.json: {cache: false}
 
-  benchmark:                                 # size + speed of every model on the same frames
-    cmd: python -m src.evaluation.benchmark
+  benchmark:
+    cmd: python -m src.evaluate --benchmark
     deps:
       - outputs/training/astt_baseline/model.pth
       - outputs/training/astt_improved/model.pth
       - outputs/training/aivad/model.pth
       - outputs/training/aivad_lite/model.pth
-      - src/evaluation/benchmark.py
+      - src/evaluate.py
     outs:
-      - outputs/comparison/benchmark.md:
-          cache: false
+      - outputs/comparison/benchmark.md: {cache: false}
     metrics:
-      - outputs/comparison/benchmark.json:
-          cache: false
+      - outputs/comparison/benchmark.json: {cache: false}
 
-# `dvc plots show` / `dvc plots diff v1.0 v2.0` draw these
-plots:
-  - Training loss:
-      x: step
-      y:
-        outputs/training/astt_baseline/log.csv: loss
-        outputs/training/astt_improved/log.csv: loss
+plots:                                     # dvc plots show / dvc plots diff v1.0 v2.0
   - ROC on the test videos:
       x: fpr
       y:
@@ -294,41 +145,24 @@ plots:
         outputs/evaluation/aivad/roc.csv: tpr
         outputs/evaluation/aivad_lite/roc.csv: tpr
 
-# Model registry entries (metadata DVC keeps for each model; `dvc artifacts get` can fetch them)
-artifacts:
+artifacts:                                 # model registry: what each trained model is
   astt-baseline:
     path: outputs/training/astt_baseline/model.pth
     type: model
-    desc: "Model 1: thesis ASTT (STE + TTE + cross-attention), unchanged, trained from scratch"
+    desc: "Model 1: thesis ASTT (STE + TTE + cross-attention), unchanged, trained from scratch, 150.6M"
     labels: [video-anomaly-detection, shanghaitech, thesis, baseline]
-    meta:
-      framework: pytorch
-      parameters: 150579876
-      config: configs/astt_baseline.yaml
   astt-improved:
     path: outputs/training/astt_improved/model.pth
     type: model
-    desc: "Model 2: improved ASTT (pretrained ViT, spatial tokens, residual prediction)"
+    desc: "Model 2: improved ASTT (pretrained ViT, spatial tokens, residual prediction), 100.4M"
     labels: [video-anomaly-detection, shanghaitech, transfer-learning]
-    meta:
-      framework: pytorch
-      parameters: 100379299
-      config: configs/astt_improved.yaml
   aivad:
     path: outputs/training/aivad/model.pth
     type: model
-    desc: "Model 3: AI-VAD (Mask R-CNN + FlowNet2 + AlphaPose + CLIP; GMM / 1-NN density)"
+    desc: "Model 3: AI-VAD density model (networks: Faster R-CNN + FlowNet2 + FastPose + CLIP, 331.0M)"
     labels: [video-anomaly-detection, shanghaitech, interpretable, baseline]
-    meta:
-      framework: pytorch + scikit-learn
-      parameters_networks: "333.6M"
-      config: configs/aivad.yaml
   aivad-lite:
     path: outputs/training/aivad_lite/model.pth
     type: model
-    desc: "Model 4: AI-VAD Lite (YOLO11x-pose + RAFT; per-camera density, track smoothing)"
+    desc: "Model 4: AI-VAD Lite density model (networks: Keypoint R-CNN + FlowNetC, 98.3M)"
     labels: [video-anomaly-detection, shanghaitech, interpretable, lightweight]
-    meta:
-      framework: pytorch + scikit-learn
-      parameters_networks: "64.1M"
-      config: configs/aivad_lite.yaml
