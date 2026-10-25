@@ -1,0 +1,44 @@
+{
+  "dataset": "ShanghaiTech Campus",
+  "source": {
+    "kaggle_train": "nikanvasei/shanghaitech-campus-dataset",
+    "kaggle_test": "nikanvasei/shanghaitech-campus-dataset-test",
+    "raw_dvc_md5": "846d595c5d4626da7a20e400ff567046.dir",
+    "parts": {
+      "train": {
+        "zip": "train.zip",
+        "zip_bytes": 11717009285,
+        "videos": 238,
+        "label_files": 238
+      },
+      "test": {
+        "zip": "test.zip",
+        "zip_bytes": 9362539834,
+        "videos": 199,
+        "label_files": 199
+      }
+    }
+  },
+  "videos": 437,
+  "frames": 315396,
+  "official_split": {
+    "train": {
+      "videos": 330,
+      "frames": 274605
+    },
+    "test": {
+      "videos": 107,
+      "frames": 40791,
+      "abnormal_videos": 107,
+      "abnormal_frames": 17326
+    }
+  },
+  "expected": {
+    "videos": 437,
+    "train_videos": 330,
+    "test_videos": 107,
+    "test_frames": 40791
+  },
+  "fps": 25,
+  "problems": []
+}
