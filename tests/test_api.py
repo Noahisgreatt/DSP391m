@@ -1,8 +1,16 @@
-"""API with the behavior rules only (no trained model needed): upload -> JSON + metrics."""
-
+"""API with the behavior rules only (no trained model, no downloads): upload -> JSON + metrics."""
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
+
+
+class NoPeople:                                          # instead of the Keypoint R-CNN tracker
+    def __init__(self, *a, **k):
+        pass
+
+    def video(self, frames):
+        return {"tracks": np.zeros((0, 7), np.float32), "velocity": np.zeros((0, 2), np.float32),
+                "moving": np.zeros(0, bool), "frame_names": np.array([f.name for f in frames])}
 
 
 def test_api(tmp_path, monkeypatch):
@@ -13,13 +21,7 @@ def test_api(tmp_path, monkeypatch):
         cv2.rectangle(img, (5 + 3 * t, 30), (15 + 3 * t, 60), (0, 0, 255), -1)
         w.write(img)
     w.release()
-
-    def no_yolo(cfg, frames, out):                      # tracking without downloading YOLO
-        np.savez(out, tracks=np.zeros((0, 7), np.float32), velocity=np.zeros((0, 2), np.float32),
-                 moving=np.zeros(0, bool), frame_names=np.array([f.name for f in frames]))
-        return np.zeros((0, 7), np.float32)
-
-    monkeypatch.setattr("src.inference.analyze.track_and_save", no_yolo)
+    monkeypatch.setattr("src.demo.PeopleTracker", NoPeople)
     monkeypatch.setenv("VAD_MODEL", "none")
     import api.main as m
     monkeypatch.setattr(m, "WORK", tmp_path / "api")
@@ -31,5 +33,4 @@ def test_api(tmp_path, monkeypatch):
         assert j["frames"] == 20 and j["frame_scores"] is None
         assert c.get(j["result_video"]).status_code == 200
         assert c.post("/analyze", files={"file": ("a.txt", b"x", "text/plain")}).status_code == 400
-        metrics = c.get("/metrics").text
-        assert 'vad_videos_analyzed_total{model="none"} 1.0' in metrics
+        assert 'vad_videos_analyzed_total{model="none"} 1.0' in c.get("/metrics").text

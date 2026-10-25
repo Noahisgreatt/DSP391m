@@ -1,8 +1,8 @@
 # Model 2: our improved ASTT. Same task (predict the next frame from 4 past frames, score =
 # prediction error) and same ViT-B/32 backbone, so the comparison with model 1 is fair.
 # Every change from astt_baseline.yaml is marked [CHANGE] and explained in docs/models.md.
-#   python -m src.training.train       --config configs/astt_improved.yaml
-#   python -m src.evaluation.evaluate  --config configs/astt_improved.yaml
+#   python -m src.train    --config configs/astt_improved.yaml
+#   python -m src.evaluate --config configs/astt_improved.yaml
 
 model:
   name: astt_improved

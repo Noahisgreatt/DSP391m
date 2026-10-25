@@ -1,11 +1,11 @@
 # Model 1: the thesis model (ASTT), UNCHANGED. Every value is the original repo default
 # (third_party/ASTT/config.py get_train_config + get_b16_config, train_val_UIT_ADrone_*.py).
-#   python -m src.training.train       --config configs/astt_baseline.yaml
-#   python -m src.evaluation.evaluate  --config configs/astt_baseline.yaml
+#   python -m src.train    --config configs/astt_baseline.yaml
+#   python -m src.evaluate --config configs/astt_baseline.yaml
 
 model:
   name: astt_baseline
-  pretrained: false           # repo: timm.create_model('vit_base_patch32_384', pretrained=False)
+  pretrained: false           # repo: random-init ViT-B/32 (built by our own ViT, src/models/nets.py)
   image_size: 384             # --image-size 384 (input frames)
   output_size: 256            # predicted frame (fixed by the repo decoder)
   num_frames: 4               # 4 past frames -> predict the 5th

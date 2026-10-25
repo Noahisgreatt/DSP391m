@@ -9,14 +9,15 @@
   ShanghaiTech is kept as 2 zips because 180,000 small JPEGs are very slow on Google Drive.
 - **Re-created, not pushed** (`cache: false`): unpacked frames, features, checkpoints, scores.
 - **Committed to git** (small): data cards, split, metrics / plots JSON and CSV, release cards.
-- **Pipeline**: `dvc.yaml`, 5 groups of stages (data, behavior, models, evaluation, comparison);
+- **Pipeline**: `dvc.yaml`, 4 groups of stages: data (`src/data.py`), behavior (`src/behavior.py`),
+  models (`src/train.py`), evaluation + comparison (`src/evaluate.py`);
   `dvc dag` draws it, `dvc repro <stage>` runs a stage and everything it needs.
 - **Parameters**: every `configs/*.yaml` value a stage uses is declared under `params:`, so
   `dvc status` knows when a setting change makes a result out of date.
 - **Metrics / plots**: `dvc metrics show`, `dvc plots show` (training loss, ROC of every model).
 - **Model registry**: `artifacts:` in `dvc.yaml` describes the 4 models (path, type, labels).
 
-## FastAPI (`api/`)
+## FastAPI (`api/main.py`, uses `src/demo.py`)
 `uvicorn api.main:app --port 8000`, then http://localhost:8000/docs
 | Endpoint | |
 |---|---|
@@ -36,6 +37,6 @@ Grafana http://localhost:3000 (admin/admin), dashboard **DSP391m - Video anomaly
   model, render), frames/s, behavior events per type, unusual objects per attribute (models 3/4),
   **frame-score distribution vs. the threshold and share of abnormal frames: if these drift
   upwards, incoming videos no longer look like the training data (data drift)**.
-- **Training (live)**: `train.py` serves its metrics on port 8001 while it runs: loss, learning
+- **Training (live)**: `src/train.py` serves its metrics on port 8001 while it runs: loss, learning
   rate, it/s, progress, time left, epoch, validation AUC, GPU memory.
 Prometheus config: `monitoring/prometheus.yml`; dashboard JSON: `monitoring/grafana/dashboards/`.

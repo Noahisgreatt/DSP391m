@@ -1,91 +1,78 @@
 # DSP391m: Video anomaly detection (loitering and counter-flow)
 
-Find abnormal behaviour in surveillance video: people **loitering**, people moving **against
-the crowd** (counter-flow) or **much faster** than it, and anything else the models learn is
-unusual. Dataset: ShanghaiTech Campus (official split: 330 normal training videos, 107 test
-videos with frame labels) plus our own phone videos.
+Find abnormal behaviour in surveillance video: people **loitering**, people moving **against the
+crowd** (counter-flow) or **much faster** than it, and anything else the models learn is unusual.
+Data: ShanghaiTech Campus (official split: 330 normal training videos, 107 test videos with frame
+labels) + our own phone videos.
 
-| # | Model | What it is | Parameters | Trained? |
-|---|---|---|---|---|
-| 1 | `astt_baseline` | The thesis model (Tran Minh Tung, ASTT), **unchanged** | 150.6M | yes, from scratch |
-| 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT, spatial tokens, residual prediction) | 100.4M | yes, fine-tuned |
-| 3 | `aivad` | AI-VAD (Reiss & Hoshen, TMLR 2025), original networks | 333.6M | no: pretrained networks + density fit |
-| 4 | `aivad_lite` | Our lighter AI-VAD (YOLO11x-pose + RAFT, per-camera, track-aware) | 64.1M | no: same |
-| - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 | no |
+| # | Model | What it is | Parameters |
+|---|---|---|---|
+| 1 | `astt_baseline` | The thesis model (Tran Minh Tung, ASTT), **unchanged**, trained from scratch | 150.6M |
+| 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT = transfer learning, spatial tokens, residual prediction) | 100.4M |
+| 3 | `aivad` | AI-VAD (Reiss & Hoshen, TMLR 2025) with its original networks | 331.0M |
+| 4 | `aivad_lite` | Our lighter AI-VAD (Keypoint R-CNN + FlowNetC, per-camera, track-aware) | 98.3M |
+| - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 |
 
-Models 1-2 score a frame by how badly they **predict** it; models 3-4 by how **unusual** each
-object's motion and pose are. All are measured the same way (frame AUC / EER, `src/evaluation`).
-Details and every difference: [docs/models.md](docs/models.md).
+**No model comes from a library call.** Every network (ViT, CLIP image encoder, Faster / Keypoint
+R-CNN, FastPose, FlowNet2) is PyTorch code in this project, loaded with pretrained weights where
+the method uses them. `tests/test_nets.py` shows each gives the same output as the reference
+implementation; `tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP
+and detectron2 blocked. Details: [docs/models.md](docs/models.md).
 
-## Folder map: one folder = one job
+## Folder map
 
 ```
-configs/            ALL settings (DVC tracks them as parameters)
-  data.yaml           paths, dataset, split            behavior.yaml  rule thresholds
-  astt_baseline.yaml  model 1     astt_improved.yaml  model 2
-  aivad.yaml          model 3     aivad_lite.yaml     model 4     api.yaml  serving + monitoring
-src/
-  data/         1  download, unpack, split, PyTorch datasets
-  models/       2  astt_baseline.py, astt_improved.py, aivad/ (models 3 + 4)
-  training/     3  train.py (any model; the config decides), live training metrics
-  evaluation/   4  evaluate.py, metrics.py, compare.py, benchmark.py
-  behavior/     5  tracking, optical flow, loitering.py, counter_flow.py, detect.py
-  inference/    6  analyze ONE video end to end + draw the result video
-  release.py       metadata card of a version (v1, v2, ...)
-api/            7  FastAPI service + Prometheus metrics
-monitoring/        Prometheus + Grafana (dashboard included)
-third_party/       original code of ASTT / AI-VAD / AlphaPose (downloaded, checksummed, never edited)
-tests/             pytest: models, metrics, rules, data, API
-docs/              models, versions, MLOps notes for the report
-data/  (DVC)       raw/ (zips, manual videos) -> processed/ -> features/ ; metadata/ (data cards)
-outputs/ (DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
-releases/          one metadata card per version (git-tagged)
+configs/             ALL settings
+  data.yaml  behavior.yaml  api.yaml
+  astt_baseline.yaml  astt_improved.yaml  aivad.yaml  aivad_lite.yaml     (one per model)
+src/                 ALL code, one file per step
+  data.py        1  get, unpack and split the data; feed it to the models
+  models/        2  astt.py (models 1, 2)  aivad.py (models 3, 4)  nets.py (the networks)
+  train.py       3  train any model (the config decides which)
+  evaluate.py    4  AUC / EER of one model, comparison table, size + speed benchmark
+  behavior.py    5  people tracking, loitering, counter-flow
+  demo.py        6  one video in -> annotated video + JSON out
+  utils.py          settings, paths, reading frames
+  release.py        metadata card of a version (v1, v2, ...)
+api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
+tests/            pytest                                          docs/        notes for the report
+third_party/      thesis / AI-VAD / AlphaPose code (downloaded at fixed versions, never edited)
+data/   (DVC)     raw/ -> processed/ ; metadata/ (data cards, split)
+outputs/(DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
 ```
 
 ## Setup (WSL Ubuntu, conda env `dsp391m`, Python 3.10)
 ```bash
-conda activate dsp391m
 pip install -r requirements.txt
-pip install --no-build-isolation "git+https://github.com/facebookresearch/detectron2.git"  # model 3 only
-python third_party/fetch.py              # original ASTT / AI-VAD / AlphaPose code, verified
-python -m pytest -q tests                # everything works? (~1 min)
+python third_party/fetch.py                  # original thesis / AI-VAD / AlphaPose code, checked
+python -m src.models.nets download behavior  # pretrained weights the steps need (see each config)
+python -m pytest -q tests                    # everything works?
 ```
 
-## Data
+## Run (the same commands for every model)
 ```bash
-dvc pull                                  # if the data is already on our DVC remote, or:
-python -m src.data.download               # Kaggle zips (or --pack-train/--pack-test DIR)
-dvc add data/raw/shanghaitech && dvc push
-dvc repro split                           # unpack + data card + official split (437 / 330 / 107)
-```
-
-## Run (same commands for every model)
-```bash
-python -m src.training.train      --config configs/astt_baseline.yaml --smoke   # 2-minute test
-python -m src.training.train      --config configs/astt_baseline.yaml           # stopped? run it again
-python -m src.evaluation.evaluate --config configs/astt_baseline.yaml
-python -m src.evaluation.compare                     # all evaluated models + rules -> outputs/comparison/
-python -m src.evaluation.benchmark                   # size + speed of every model
-python -m src.inference.analyze --video clip.mp4 --model aivad_lite             # one video -> result.mp4
+dvc repro split                                              # data: unpack + split (437 / 330 / 107)
+python -m src.train    --config configs/astt_baseline.yaml --smoke   # 2-minute test
+python -m src.train    --config configs/astt_baseline.yaml   # stopped? run it again: it continues
+python -m src.evaluate --config configs/astt_baseline.yaml
+python -m src.evaluate --compare                             # all evaluated models + the rules
+python -m src.evaluate --benchmark                           # size and speed of every model
+python -m src.demo --video clip.mp4 --model aivad_lite       # one video -> outputs/demo/clip/
 ```
 Or with DVC: `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`, `dvc repro compare`.
-Model 3 also needs `python -m src.models.aivad.weights --model aivad` first.
 
 ## MLOps
-- **DVC**: data, models and the whole pipeline (`dvc dag`); versions v1-v4 with metadata cards
-  ([docs/versioning.md](docs/versioning.md)); `dvc metrics diff v1.0 v2.0`.
-- **FastAPI**: `uvicorn api.main:app` -> http://localhost:8000/docs
-- **Docker + Prometheus + Grafana**: `docker compose up --build -d` -> API :8000, Grafana :3000
-  (dashboard "DSP391m - Video anomaly detection": serving and live training).
-Details: [docs/mlops.md](docs/mlops.md).
+DVC (data, models, pipeline, versions v1-v4 with metadata cards: [docs/versioning.md](docs/versioning.md)),
+FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), Docker + Prometheus + Grafana
+(`docker compose up --build -d` -> Grafana http://localhost:3000). Details: [docs/mlops.md](docs/mlops.md).
 
 ## Where is ...? (for questions in the defence)
 | Question | Answer |
 |---|---|
-| Where is the thesis model? Is it really unchanged? | `src/models/astt_baseline.py` builds it from `third_party/ASTT` (checksums: `python third_party/fetch.py --check`); `pytest tests/test_models.py` checks the 150,579,876 parameters |
-| What did you improve? | `configs/astt_improved.yaml` and `configs/aivad_lite.yaml`, every change marked `[CHANGE]`; reasons in docs/models.md |
-| How is loitering / counter-flow decided? | `src/behavior/loitering.py`, `src/behavior/counter_flow.py`; thresholds in `configs/behavior.yaml` |
-| How is accuracy measured? | `src/evaluation/metrics.py` (one file for all models) |
-| Which videos are train / test? | `data/metadata/split.json`, made by `src/data/split.py` |
+| Where is the thesis model? Is it really unchanged? | `src/models/astt.py` (ASTTThesis) on top of `third_party/ASTT`; `python third_party/fetch.py --check` proves the repo files are unedited; `tests/test_models.py` checks 150,579,876 parameters |
+| Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
+| What did you improve? | `configs/astt_improved.yaml`, `configs/aivad_lite.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |
+| How are loitering / counter-flow decided? | `src/behavior.py` (functions `loitering`, `counter_flow`); thresholds in `configs/behavior.yaml` |
+| How is accuracy measured? | `src/evaluate.py` (one metric code for all models) |
+| Which videos are train / test? | `data/metadata/split.json`, made by `src/data.py` |
 | How do I get exactly version 1 back? | `git checkout v1.0 && dvc pull` |
-| Where are training logs / results? | `outputs/training/<model>/`, `outputs/evaluation/<model>/`, `outputs/comparison/` |
