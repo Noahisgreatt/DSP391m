@@ -3,7 +3,52 @@
 Find abnormal behaviour in surveillance video: people **loitering**, people moving **against the
 crowd** (counter-flow) or **much faster** than it, and anything else the models learn is unusual.
 Data: ShanghaiTech Campus (official split: 330 normal training videos, 107 test videos with frame
-labels) + our own phone videos.
+labels) + our own phone videos. Four models are trained and compared on the same test set.
+
+## Run everything with one command
+
+```bash
+git clone https://github.com/Noahisgreatt/DSP391m.git
+cd DSP391m
+bash run_all.sh --smoke     # first: quick check that every step works (tiny training runs)
+bash run_all.sh             # then: the real thing, all 4 models from start to finish
+```
+
+**Stopped halfway** (power cut, closed laptop, an error you fixed)? Run the same command again:
+finished steps are skipped and training continues from its last checkpoint (saved every 20 min).
+To keep it running after you close the terminal:
+`nohup bash run_all.sh > run_all.log 2>&1 &` and watch it with `tail -f run_all.log`.
+
+### What you need
+| | |
+|---|---|
+| Computer | Linux, or Windows with WSL2 Ubuntu |
+| GPU | NVIDIA, 6 GB or more (developed on an RTX 4050 Laptop) |
+| Disk | about 100 GB free (data 21 GB zipped + 21 GB unpacked, weights 2 GB, features, models) |
+| Python | conda (the script makes an env `dsp391m`), or Python >= 3.10 (it makes `.venv`) |
+| Data | access to our DVC remote (ask the project owner), **or** a free Kaggle API token in `~/.kaggle/kaggle.json` (kaggle.com -> Settings -> API -> Create New Token) |
+
+### What `run_all.sh` does
+| Step | What | Time (rough, RTX 4050) |
+|---|---|---|
+| 1 | Python environment (conda env `dsp391m` or `.venv`) | minutes |
+| 2 | Packages from `requirements.txt` (+ `gcc`, which PyTorch's GPU kernels need) | minutes |
+| 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
+| 4 | Pretrained weights into `weights/` (2 GB) | minutes |
+| 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
+| 6 | Train + evaluate model 1, 2, 3, 4 (`--smoke`: tiny runs, a few minutes each) | full: 1-2 days in total |
+| 7 | Print the comparison table and the speed benchmark | - |
+
+### Results
+| File | Content |
+|---|---|
+| `outputs/comparison/comparison.md` | **the main table**: AUC (micro / per-video / macro), EER, parameters, speed of every model |
+| `outputs/comparison/roc.png` | ROC curves of all models |
+| `outputs/comparison/benchmark.md` | parameters, ms per frame (per step), frames/s, GPU memory |
+| `outputs/evaluation/<model>/metrics.json` | the numbers of one model |
+| `outputs/training/<model>/` | trained model (`model.pth`), training log, settings used (`run.json`) |
+
+## The four models
 
 | # | Model | What it is | Parameters |
 |---|---|---|---|
@@ -14,14 +59,15 @@ labels) + our own phone videos.
 | - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 |
 
 **No model comes from a library call.** Every network (ViT, CLIP image encoder, Faster / Keypoint
-R-CNN, FastPose, FlowNet2) is PyTorch code in this project, loaded with pretrained weights where
-the method uses them. `tests/test_nets.py` shows each gives the same output as the reference
-implementation; `tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP
-and detectron2 blocked. Details: [docs/models.md](docs/models.md).
+R-CNN, FastPose, FlowNet2) is PyTorch code in this project; only the pretrained *weights* are
+downloaded. `tests/test_nets.py` shows each gives the same output as the reference implementation;
+`tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP and detectron2
+blocked. Details and the reason for every change: [docs/models.md](docs/models.md).
 
 ## Folder map
 
 ```
+run_all.sh           ONE command for everything (above)
 configs/             ALL settings
   data.yaml  behavior.yaml  api.yaml
   astt_baseline.yaml  astt_improved.yaml  aivad.yaml  aivad_lite.yaml     (one per model)
@@ -37,29 +83,23 @@ src/                 ALL code, one file per step
 api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
 tests/            pytest                                          docs/        notes for the report
 third_party/      thesis / AI-VAD / AlphaPose code (downloaded at fixed versions, never edited)
+dvc.yaml          the pipeline run_all.sh uses (dvc dag draws it)
 data/   (DVC)     raw/ -> processed/ ; metadata/ (data cards, split)
 outputs/(DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
 ```
 
-## Setup (WSL Ubuntu, conda env `dsp391m`, Python 3.10)
+## One step at a time (what run_all.sh calls)
 ```bash
-pip install -r requirements.txt
-python third_party/fetch.py                  # original thesis / AI-VAD / AlphaPose code, checked
-python -m src.models.nets download behavior  # pretrained weights the steps need (see each config)
-python -m pytest -q tests                    # everything works?
-```
-
-## Run (the same commands for every model)
-```bash
-dvc repro split                                              # data: unpack + split (437 / 330 / 107)
-python -m src.train    --config configs/astt_baseline.yaml --smoke   # 2-minute test
-python -m src.train    --config configs/astt_baseline.yaml   # stopped? run it again: it continues
-python -m src.evaluate --config configs/astt_baseline.yaml
-python -m src.evaluate --compare                             # all evaluated models + the rules
+python -m src.train    --config configs/astt_baseline.yaml --smoke   # 2-minute test of one model
+python -m src.train    --config configs/astt_baseline.yaml   # train one model (resumes if stopped)
+python -m src.evaluate --config configs/astt_baseline.yaml   # AUC / EER on the 107 test videos
+python -m src.evaluate --compare                             # table of all evaluated models
 python -m src.evaluate --benchmark                           # size and speed of every model
 python -m src.demo --video clip.mp4 --model aivad_lite       # one video -> outputs/demo/clip/
+python -m pytest -q tests                                    # everything still works?
 ```
-Or with DVC: `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`, `dvc repro compare`.
+Same with DVC (records what was run): `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`,
+`dvc repro compare`.
 
 ## MLOps
 DVC (data, models, pipeline, versions v1-v4 with metadata cards: [docs/versioning.md](docs/versioning.md)),
@@ -69,6 +109,7 @@ FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), Docker + Prometh
 ## Where is ...? (for questions in the defence)
 | Question | Answer |
 |---|---|
+| How do I run everything? | `bash run_all.sh` |
 | Where is the thesis model? Is it really unchanged? | `src/models/astt.py` (ASTTThesis) on top of `third_party/ASTT`; `python third_party/fetch.py --check` proves the repo files are unedited; `tests/test_models.py` checks 150,579,876 parameters |
 | Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
 | What did you improve? | `configs/astt_improved.yaml`, `configs/aivad_lite.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |

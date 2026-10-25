@@ -30,3 +30,7 @@ weights/
 third_party/ASTT/
 third_party/AIVAD/
 third_party/AlphaPose/
+
+# ---- made by run_all.sh when conda is missing
+.venv/
+run_all.log
