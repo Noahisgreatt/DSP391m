@@ -1,7 +1,11 @@
 .vscode/
 outputs/
-models/
 runs/
 results/
 *.pt
 *.pth
+data/raw/_download/
+data/raw/shanghaitech/
+data/interim/
+__pycache__/
+*.pyc

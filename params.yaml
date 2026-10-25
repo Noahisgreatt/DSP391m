@@ -3,8 +3,9 @@
 # (e.g. configs/features/farneback.yaml) without editing this one.
 
 data:
-  # ShanghaiTech already comes as frames: one folder per video
-  shanghai_frames: data/raw/SHANGHAI/SHANGHAI_TRAIN/frames
+  # ShanghaiTech Campus as frames: one folder per video (train + test clips together).
+  # Labels: <parent>/label/<video>.npy for test clips. Built by scripts/prepare_shanghaitech.py
+  shanghai_frames: data/raw/shanghaitech/frames
   # Your manual videos (tracked by DVC)
   manual_videos: data/raw/manual
   # Where extracted frames of the manual videos go

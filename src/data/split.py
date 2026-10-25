@@ -2,7 +2,11 @@
 
 Split
 -----
-Both models are unsupervised: they must be TRAINED ON NORMAL VIDEOS ONLY. Your copy
+Both models are unsupervised: they must be TRAINED ON NORMAL VIDEOS ONLY.
+
+split_mode: standard  (official ShanghaiTech Campus, data/raw/shanghaitech/)
+  train = the 330 training videos (names XX_YYY), test = the 107 test videos (XX_YYYY).
+split_mode: auto      (the older 238-video weakly-supervised copy, rules below) Your copy
 (data/raw/SHANGHAI/SHANGHAI_TRAIN, 238 videos + SHANGHAI_train.txt + label/) looks like the
 weakly-supervised ShanghaiTech split, whose "train" part also contains abnormal videos.
 So every video is classified using, in this order:
@@ -94,6 +98,25 @@ def make_split(cfg: dict) -> dict:
 
     videos = discover_shanghai(cfg)
     rng = np.random.RandomState(d["seed"])
+
+    if d.get("split_mode", "auto") == "standard":
+        # Official ShanghaiTech Campus split: training videos are all normal and used for
+        # training; every testing video is for testing.
+        # val_fraction > 0 moves that share of test videos to validation (best-epoch choice);
+        # 0 = no validation, the last epoch is used and all test videos stay comparable to papers.
+        # Campus naming: training videos are XX_YYY (330), test videos are XX_YYYY (107).
+        # (The Kaggle copies mix them into a weakly-supervised 238/199 split; names undo that.)
+        train = sorted(v["id"] for v in videos if re.fullmatch(r"\d{2}_\d{3}", v["id"]))
+        test_all = sorted(v["id"] for v in videos if re.fullmatch(r"\d{2}_\d{4}", v["id"]))
+        bad = [v["id"] for v in videos if v["id"] in train and v["_labels"] is not None
+               and v["_labels"].max() > 0]
+        if bad:
+            print(f"WARNING: {len(bad)} training-named videos have abnormal frames, e.g. {bad[:3]}")
+        n_val = int(round(len(test_all) * d.get("val_fraction", 0)))
+        val = sorted(str(x) for x in rng.choice(test_all, n_val, replace=False)) if n_val else []
+        return {"train": train, "val": val, "test": sorted(set(test_all) - set(val)),
+                "unknown": [], "sources": {v["id"]: "standard split" for v in videos}}
+
     normal = [v["id"] for v in videos if v["normal"] is True]
     abnormal = [v["id"] for v in videos if v["normal"] is False]
     unknown = [v["id"] for v in videos if v["normal"] is None]
