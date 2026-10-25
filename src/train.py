@@ -90,8 +90,14 @@ def optimizer_and_schedule(cfg, model, total):
 
 
 def save(path, obj):
-    torch.save(obj, path.with_suffix(".tmp"))
-    path.with_suffix(".tmp").replace(path)                    # never a half-written file
+    tmp = path.with_suffix(".tmp")
+    try:
+        torch.save(obj, tmp)
+    except (OSError, RuntimeError) as e:                      # e.g. disk full: keep the last good file
+        tmp.unlink(missing_ok=True)
+        raise SystemExit(f"could not save {path} ({e}); free some disk space and run again: "
+                         "training continues from the last checkpoint")
+    tmp.replace(path)                                         # never a half-written file
 
 
 def train_astt(cfg, args):
