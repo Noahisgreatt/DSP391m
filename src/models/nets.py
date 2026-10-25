@@ -43,7 +43,10 @@ WEIGHT_SOURCES = {   # name: (file, url or google-drive id)
                      "https://download.pytorch.org/models/keypointrcnn_resnet50_fpn_coco-fc266e95.pth"),
     "clip_b16": ("CLIP-ViT-B-16.pt", "https://openaipublic.azureedge.net/clip/models/"
                  "5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f/ViT-B-16.pt"),
-    "flownet2": ("FlowNet2_checkpoint.pth.tar", "gdrive:1hF8vS6YeHkx3j2pfCeQqqZGwA_PJq_Da"),
+    # NVIDIA's original Google Drive link (1hF8vS6YeHkx3j2pfCeQqqZGwA_PJq_Da) is closed (403); same file
+    # mirrored by EvalCrafter (CVPR 2024). Loaded weights-only and checked layer by layer (flownet2()).
+    "flownet2": ("FlowNet2_checkpoint.pth.tar",
+                 "https://huggingface.co/RaphaelLiu/EvalCrafter-Models/resolve/main/FlowNet2_checkpoint.pth.tar"),
     "fastpose": ("fast_res50_256x192.pth", "gdrive:1kQhnMRURFiy7NsdS8EFL-8vtqEXOgECn"),
 }
 
@@ -80,6 +83,23 @@ def download(name: str) -> Path | None:
                            f"  and save it as: {path}") from None
     part.replace(path)
     return path
+
+
+def safe_load(path):
+    """torch.load that only reads tensors and plain values: a weight file can't run code."""
+    try:
+        return torch.load(str(path), map_location="cpu", weights_only=True)
+    except Exception as first:
+        import numpy as np                                  # old checkpoints store numpy numbers
+        core = getattr(np, "_core", None) or np.core
+        allow = [np.dtype, core.multiarray.scalar] + [type(np.dtype(t)) for t in ("float64", "float32", "int64")]
+        if not hasattr(torch.serialization, "add_safe_globals"):
+            raise SystemExit(f"cannot safely read {path}: update PyTorch (>= 2.4)") from first
+        torch.serialization.add_safe_globals(allow)
+        try:
+            return torch.load(str(path), map_location="cpu", weights_only=True)
+        except Exception as e:
+            raise SystemExit(f"{path} contains more than weights, refusing to load it ({e})") from None
 
 
 def n_params(m: nn.Module) -> int:
@@ -405,7 +425,7 @@ class RCNN(nn.Module):
         path = path or download(name)
         if path is None:
             return self
-        sd = torch.load(str(path), map_location="cpu")
+        sd = safe_load(path)
         own = self.state_dict()
         self.load_state_dict({k: v for k, v in sd.items() if k in own})   # Mask R-CNN: mask head unused
         return self
@@ -608,7 +628,7 @@ class FastPose(nn.Module):
     def load_pretrained(self, path=None):
         path = path or download("fastpose")
         if path is not None:
-            self.load_state_dict(torch.load(str(path), map_location="cpu"))
+            self.load_state_dict(safe_load(path))
         return self
 
     @staticmethod
@@ -721,10 +741,13 @@ def flownet2(weights: bool = True) -> nn.Module:
     net = importlib.import_module("pre_processing.flownet_networks.flownet2_models").FlowNet2()
     path = download("flownet2") if weights else None
     if path is not None:
-        pre = torch.load(str(path), map_location="cpu", weights_only=False)["state_dict"]
+        pre = safe_load(path)["state_dict"]
         own = net.state_dict()
-        own.update({k: v for k, v in pre.items() if k in own})
-        net.load_state_dict(own)
+        bad = [k for k in own if k not in pre or pre[k].shape != own[k].shape]
+        if bad:
+            raise SystemExit(f"{path} is not the FlowNet2 checkpoint ({len(bad)} layers missing or "
+                             f"different, e.g. {bad[0]}); delete it and download it again")
+        net.load_state_dict({k: pre[k] for k in own})
     return net.eval()
 
 
