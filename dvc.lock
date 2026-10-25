@@ -1,17 +1,17 @@
 schema: '2.0'
 stages:
   prepare_shanghaitech:
-    cmd: python -m src.data.prepare_shanghaitech
+    cmd: python -m src.data prepare
     deps:
     - path: data/raw/shanghaitech
       hash: md5
       md5: 846d595c5d4626da7a20e400ff567046.dir
       size: 21079549119
       nfiles: 2
-    - path: src/data/prepare_shanghaitech.py
+    - path: src/data.py
       hash: md5
-      md5: c215d923f7f64b065b17440feda23fad
-      size: 5356
+      md5: 310a3ed346aee339555a1b3f24124b2c
+      size: 14253
     params:
       configs/data.yaml:
         shanghaitech.kaggle_test: nikanvasei/shanghaitech-campus-dataset-test
@@ -27,16 +27,16 @@ stages:
       size: 21024117239
       nfiles: 315833
   split:
-    cmd: python -m src.data.split
+    cmd: python -m src.data split
     deps:
     - path: data/metadata/shanghaitech.json
       hash: md5
       md5: 706411c5fd197ae5bad5218f42741eee
       size: 937
-    - path: src/data/split.py
+    - path: src/data.py
       hash: md5
-      md5: ce587cbed2f28cb772f200b1d83e1eb2
-      size: 2254
+      md5: 310a3ed346aee339555a1b3f24124b2c
+      size: 14253
     params:
       configs/data.yaml:
         shanghaitech.seed: 2020
