@@ -65,9 +65,9 @@ lock = threading.Lock()                      # one video at a time on the GPU
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from src.demo import Analyzer
-    state["analyzer"] = Analyzer(os.environ.get("VAD_MODEL") or CFG["model"])
+    state["analyzer"] = Analyzer(os.environ.get("VAD_MODEL") or CFG["model"], allow_missing=True)
     info = state["analyzer"].info()
-    M.MODEL.info({k: str(v) for k, v in info.items()})
+    M.MODEL.info({k: str(v) for k, v in info.items() if k != "warning"})
     if info["threshold"] is not None:
         M.THRESHOLD.set(info["threshold"])
     WORK.mkdir(parents=True, exist_ok=True)

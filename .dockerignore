@@ -9,3 +9,8 @@ outputs/
 docs/
 tests/
 releases/
+weights/
+third_party/ASTT/
+third_party/AIVAD/
+third_party/AlphaPose/
+.venv/

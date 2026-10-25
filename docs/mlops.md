@@ -26,6 +26,8 @@
 | `GET /results/{job}` / `.../video` | the JSON / the annotated video again |
 | `GET /metrics` | Prometheus metrics |
 Served model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|aivad_lite|none`.
+If that model isn't trained + evaluated yet, the API still starts with the behavior rules only and
+`/health` says why (`warning`); after training: `docker compose restart api`.
 
 ## Docker
 `docker compose up --build -d` starts 3 containers: `api` (FastAPI, model weights mounted from

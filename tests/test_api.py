@@ -34,3 +34,16 @@ def test_api(tmp_path, monkeypatch):
         assert c.get(j["result_video"]).status_code == 200
         assert c.post("/analyze", files={"file": ("a.txt", b"x", "text/plain")}).status_code == 400
         assert 'vad_videos_analyzed_total{model="none"} 1.0' in c.get("/metrics").text
+
+
+def test_api_model_not_trained_yet(tmp_path, monkeypatch):
+    """A fresh clone (no outputs/) still starts: rules only, and /health says why."""
+    monkeypatch.setattr("src.demo.PeopleTracker", NoPeople)
+    monkeypatch.setenv("VAD_MODEL", "astt_improved")
+    monkeypatch.chdir(tmp_path)                         # no outputs/training/... here
+    (tmp_path / "configs").symlink_to(__import__("pathlib").Path(__file__).resolve().parents[1] / "configs")
+    import api.main as m
+    monkeypatch.setattr(m, "WORK", tmp_path / "api")
+    with TestClient(m.app) as c:
+        h = c.get("/health").json()
+        assert h["status"] == "ok" and h["model"] == "none" and "astt_improved is not ready" in h["warning"]

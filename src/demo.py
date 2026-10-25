@@ -32,13 +32,28 @@ TAGS = ((COUNTER, "COUNTER-FLOW", RED), (FAST, "TOO FAST", RED), (LOITER, "LOITE
 class Analyzer:
     """Loads the networks once; run() analyzes one video."""
 
-    def __init__(self, model=None, threshold=None, device=None):
+    def __init__(self, model=None, threshold=None, device=None, allow_missing=False):
+        """allow_missing (the API): a model that isn't trained / evaluated yet is skipped with a
+        warning (behavior rules only) instead of stopping the service."""
         api = load_config("configs/api.yaml")["api"]
         self.name = None if (model or api["model"]) in (None, "none") else (model or api["model"])
         self.behavior = load_config("configs/behavior.yaml")
         self.device = torch.device(device or api["device"] or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.people = PeopleTracker(self.behavior, self.device)
-        self.scorer = self.cfg = self.threshold = None
+        self.scorer = self.cfg = self.threshold = self.warning = None
+        if self.name:
+            cfg = load_config(f"configs/{self.name}.yaml")
+            need = [out_dir(cfg, "training") / "model.pth"]
+            if (threshold or api["threshold"]) is None:
+                need.append(out_dir(cfg, "evaluation") / "metrics.json")
+            missing = [str(p) for p in need if not p.exists()]
+            if missing:
+                msg = (f"model {self.name} is not ready (missing {', '.join(missing)}): train and evaluate it "
+                       f"first (bash run_all.sh); serving the behavior rules only")
+                if not allow_missing:
+                    raise SystemExit(msg)
+                print("WARNING:", msg)
+                self.warning, self.name = msg, None
         if self.name:
             from src.models import scorer
             self.cfg = load_config(f"configs/{self.name}.yaml")
@@ -52,7 +67,7 @@ class Analyzer:
 
     def info(self):
         return {"model": self.name or "none", "device": str(self.device), "threshold": self.threshold,
-                "score_type": None if self.scorer is None else self.scorer.kind}
+                "score_type": None if self.scorer is None else self.scorer.kind, "warning": self.warning}
 
     def run(self, video, work, draw=True) -> dict:
         video, work = Path(video), Path(work)
