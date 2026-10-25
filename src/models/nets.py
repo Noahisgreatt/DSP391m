@@ -64,11 +64,21 @@ def download(name: str) -> Path | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     src = WEIGHT_SOURCES[name][1]
     print(f"downloading {name} -> {path}")
-    if src.startswith("gdrive:"):
-        import gdown
-        gdown.download(id=src[7:], output=str(path), quiet=False)
-    else:
-        torch.hub.download_url_to_file(src, str(path))
+    part = path.with_name(path.name + ".part")              # never a half-downloaded weight file
+    try:
+        if src.startswith("gdrive:"):
+            import gdown
+            if gdown.download(id=src[7:], output=str(part), quiet=False) is None:
+                raise RuntimeError("Google Drive refused the download")
+        else:
+            torch.hub.download_url_to_file(src, str(part))
+    except Exception as e:
+        part.unlink(missing_ok=True)
+        link = f"https://drive.google.com/uc?id={src[7:]}" if src.startswith("gdrive:") else src
+        raise RuntimeError(f"could not download {name} ({type(e).__name__}).\n"
+                           f"  Download it in your browser: {link}\n"
+                           f"  and save it as: {path}") from None
+    part.replace(path)
     return path
 
 
@@ -745,6 +755,13 @@ if __name__ == "__main__":
     a = ap.parse_args()
     groups = {"astt_improved": ["vit_b32_384"], "aivad": ["maskrcnn", "flownet2", "fastpose", "clip_b16"],
               "aivad_lite": ["keypointrcnn", "flownet2"], "behavior": ["keypointrcnn"]}
-    for n in a.names:
-        for w in groups.get(n, [n]):
+    failed = []
+    for w in dict.fromkeys(w for n in a.names for w in groups.get(n, [n])):   # each file once
+        try:
             print("ok", download(w))
+        except RuntimeError as e:
+            print("FAILED", e)
+            failed.append(w)
+    if failed:
+        raise SystemExit(f"\nnot downloaded: {', '.join(failed)} (see the browser links above); "
+                         "everything else is ready")
