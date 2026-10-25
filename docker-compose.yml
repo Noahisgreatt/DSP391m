@@ -1,0 +1,36 @@
+# Serving + monitoring in one command:
+#   docker compose up --build -d
+#   API        http://localhost:8000/docs
+#   Prometheus http://localhost:9090
+#   Grafana    http://localhost:3000   (admin / admin) -> dashboard "DSP391m - Video anomaly detection"
+# GPU (NVIDIA + WSL): docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+services:
+  api:
+    build: .
+    image: dsp391m-vad-api:2.0
+    ports: ["8000:8000"]
+    environment:
+      VAD_MODEL: ${VAD_MODEL:-astt_improved}        # astt_baseline | astt_improved | aivad | aivad_lite | none
+    volumes:
+      - ./outputs:/app/outputs                      # model.pth + evaluation thresholds (dvc pull)
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts: ["host.docker.internal:host-gateway"]   # reach train.py on the host
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    restart: unless-stopped

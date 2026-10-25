@@ -1,0 +1,11 @@
+data/
+outputs/
+.dvc/cache
+.dvc/tmp
+.git
+**/__pycache__
+*.pth
+*.pt
+docs/
+tests/
+releases/

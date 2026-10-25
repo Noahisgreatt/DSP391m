@@ -1,0 +1,14 @@
+# What the API container needs (torch comes from the base image).
+timm==1.0.9
+ultralytics==8.3.20
+lap>=0.5.12
+opencv-python-headless>=4.8,<4.11
+numpy>=1.24,<2
+scikit-learn>=1.3
+pyyaml>=6.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+prometheus-client>=0.20
+scipy>=1.11
+gdown>=5.1

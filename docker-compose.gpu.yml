@@ -1,0 +1,10 @@
+# Add-on: give the API the NVIDIA GPU (needs the NVIDIA Container Toolkit / Docker Desktop + WSL).
+services:
+  api:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

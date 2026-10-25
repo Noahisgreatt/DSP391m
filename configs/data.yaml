@@ -1,0 +1,32 @@
+# Data settings shared by every step. Model configs (astt_*.yaml) and behavior.yaml are merged
+# on top of this file, so a value set there wins.
+
+paths:
+  raw_shanghaitech: data/raw/shanghaitech        # train.zip + test.zip (DVC-tracked)
+  raw_manual: data/raw/manual                    # our own phone videos (DVC-tracked)
+  processed: data/processed                      # <dataset>/frames/<video>/, <dataset>/labels/
+  features: data/features                        # tracking/, optical_flow/, normal_maps/
+  metadata: data/metadata                        # data cards (counts, hashes), committed to git
+  outputs: outputs                               # training/, evaluation/, behavior/, comparison/
+
+shanghaitech:
+  # Kaggle copies (nikanvasei). Together they hold all 437 ShanghaiTech Campus videos as frames.
+  kaggle_train: nikanvasei/shanghaitech-campus-dataset        # 238 videos
+  kaggle_test: nikanvasei/shanghaitech-campus-dataset-test    # 199 videos
+  fps: 25
+  # Official Campus split, rebuilt from the video names:
+  #   XX_YYY  = 330 training videos (normal only)    XX_YYYY = 107 test videos (frame labels)
+  val_fraction: 0.0         # share of test videos moved to validation (0 = none, like papers)
+  seed: 2020
+
+manual:
+  video_exts: [.mp4, .avi, .mov, .mkv, .MP4, .AVI, .MOV, .MKV]
+  fps_fallback: 30          # used only if a video has no fps in its metadata
+
+frames:                     # how manual videos are cut into frames
+  resize: [640, 360]        # [width, height]; null keeps the original size
+  step: 1                   # keep every Nth frame
+  jpg_quality: 95
+
+run:
+  workers: 4                # parallel processes for frame extraction / optical flow

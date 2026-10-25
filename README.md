@@ -1,90 +1,91 @@
-# DSP391m: Video anomaly detection (loitering and abnormal movement)
+# DSP391m: Video anomaly detection (loitering and counter-flow)
 
-Two models are compared on ShanghaiTech:
-the **thesis model (ASTT)**, unchanged from Tran Minh Tung's thesis and GitHub repo, and
-**CrowdFormer**, our own model, which marks which *person* is abnormal.
-A rule-based detector (no training) is a third, simple baseline.
+Find abnormal behaviour in surveillance video: people **loitering**, people moving **against
+the crowd** (counter-flow) or **much faster** than it, and anything else the models learn is
+unusual. Dataset: ShanghaiTech Campus (official split: 330 normal training videos, 107 test
+videos with frame labels) plus our own phone videos.
 
-## Folder map
+| # | Model | What it is | Parameters | Trained? |
+|---|---|---|---|---|
+| 1 | `astt_baseline` | The thesis model (Tran Minh Tung, ASTT), **unchanged** | 150.6M | yes, from scratch |
+| 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT, spatial tokens, residual prediction) | 100.4M | yes, fine-tuned |
+| 3 | `aivad` | AI-VAD (Reiss & Hoshen, TMLR 2025), original networks | 333.6M | no: pretrained networks + density fit |
+| 4 | `aivad_lite` | Our lighter AI-VAD (YOLO11x-pose + RAFT, per-camera, track-aware) | 64.1M | no: same |
+| - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 | no |
+
+Models 1-2 score a frame by how badly they **predict** it; models 3-4 by how **unusual** each
+object's motion and pose are. All are measured the same way (frame AUC / EER, `src/evaluation`).
+Details and every difference: [docs/models.md](docs/models.md).
+
+## Folder map: one folder = one job
 
 ```
-DSP391m/
-├── README.md              <- you are here
-├── params.yaml            shared settings: frame size, flow, tracking, rule thresholds
-├── dvc.yaml               the whole pipeline (dvc repro), in order
-│
-├── data/                  DATA (not code)
-│   ├── raw/SHANGHAI/        ShanghaiTech frames + labels (DVC)
-│   ├── raw/manual/          our own phone videos (DVC, Google Drive)
-│   ├── interim/frames/      videos cut into frames (manual/, other/ = one-off videos)
-│   └── features/            per-video results of src/features: farneback/ tracking/ events/
-│
-├── models/                MODEL CODE, one folder per model, each with its own README
-│   ├── thesis_astt/         1. thesis model, unchanged
-│   │   ├── original_repo/     the GitHub repo, byte-for-byte (do not edit)
-│   │   ├── model.py           joins the repo's parts into the final thesis model
-│   │   ├── train.py  evaluate.py  config.yaml
-│   │   └── README.md
-│   └── crowdformer/         2. our own model
-│       ├── model.py  dataset.py  train.py  evaluate.py  config.yaml
-│       └── README.md
-│
-├── runs/                  TRAINING OUTPUT, one folder per run (created automatically)
-│   └── <model>/<run_id>/    config.yaml, split.json, log.csv, checkpoints, metrics.json
-│
-├── results/               EVALUATION OUTPUT (created automatically)
-│   ├── <model>/<run_id>/    metrics_test.json, scores/, videos/ (labelled result videos)
-│   ├── comparison/          comparison.md, comparison.csv, roc.png
-│   └── visualize/           arrow videos from src.visualize
-│
-├── src/                   SHARED PIPELINE (used by both models)
-│   ├── data/                extract_frames.py (video -> frames), split.py (train/val/test)
-│   ├── features/            optical_flow.py, tracking.py (YOLO + ByteTrack), direction.py
-│   ├── baseline_rules.py    rules: LOITERING, ABNORMAL (against crowd / too fast)
-│   ├── metrics.py           frame AUC + EER, identical for every model
-│   ├── compare.py           comparison table + ROC chart
-│   ├── predict.py           any video -> labelled result video
-│   ├── visualize.py  utils.py
-│
-├── configs/               extra settings files (features/, detection/)
-└── scripts/               dataset download helpers
+configs/            ALL settings (DVC tracks them as parameters)
+  data.yaml           paths, dataset, split            behavior.yaml  rule thresholds
+  astt_baseline.yaml  model 1     astt_improved.yaml  model 2
+  aivad.yaml          model 3     aivad_lite.yaml     model 4     api.yaml  serving + monitoring
+src/
+  data/         1  download, unpack, split, PyTorch datasets
+  models/       2  astt_baseline.py, astt_improved.py, aivad/ (models 3 + 4)
+  training/     3  train.py (any model; the config decides), live training metrics
+  evaluation/   4  evaluate.py, metrics.py, compare.py, benchmark.py
+  behavior/     5  tracking, optical flow, loitering.py, counter_flow.py, detect.py
+  inference/    6  analyze ONE video end to end + draw the result video
+  release.py       metadata card of a version (v1, v2, ...)
+api/            7  FastAPI service + Prometheus metrics
+monitoring/        Prometheus + Grafana (dashboard included)
+third_party/       original code of ASTT / AI-VAD / AlphaPose (downloaded, checksummed, never edited)
+tests/             pytest: models, metrics, rules, data, API
+docs/              models, versions, MLOps notes for the report
+data/  (DVC)       raw/ (zips, manual videos) -> processed/ -> features/ ; metadata/ (data cards)
+outputs/ (DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
+releases/          one metadata card per version (git-tagged)
 ```
 
-The rule of thumb: **code** lives in `models/` and `src/`, **what training makes** goes to
-`runs/`, **what evaluation makes** goes to `results/`. Nothing in `runs/` or `results/` is
-written by hand.
-
-## Run order
-
+## Setup (WSL Ubuntu, conda env `dsp391m`, Python 3.10)
 ```bash
-# 0. check which videos are train / val / test (same for both models)
-python -m src.data.split --config models/thesis_astt/config.yaml
-
-# 1. features + rule baseline
-dvc repro track_shanghai          # people tracking (~1 h on GPU)
-dvc repro rules_shanghai
-
-# 2. thesis model
-python -m models.thesis_astt.train    --config models/thesis_astt/config.yaml
-python -m models.thesis_astt.evaluate --run runs/thesis_astt/<run_id>
-
-# 3. own model
-python -m models.crowdformer.train    --config models/crowdformer/config.yaml
-python -m models.crowdformer.evaluate --run runs/crowdformer/<run_id>
-
-# 4. compare (table + ROC in results/comparison/)
-python -m src.compare --runs runs/thesis_astt/<run_id> runs/crowdformer/<run_id>
-
-# 5. result video for any clip (people boxed with ABNORMAL / LOITERING)
-python -m src.predict --run runs/crowdformer/<run_id> --video path/to/clip.MOV
+conda activate dsp391m
+pip install -r requirements.txt
+pip install --no-build-isolation "git+https://github.com/facebookresearch/detectron2.git"  # model 3 only
+python third_party/fetch.py              # original ASTT / AI-VAD / AlphaPose code, verified
+python -m pytest -q tests                # everything works? (~1 min)
 ```
-Add `--smoke` to a train command for a 2-minute test run.
-`<run_id>` is printed when training starts (a timestamp unless you pass `--run-name`).
-Or run steps 1-4 with DVC: `dvc repro compare` (its runs are called `dvc`).
 
-## Metrics (same as the thesis, Chapter 5)
-- **Frame-level AUC-ROC**, main metric, higher is better. Reported per-video normalised
-  ("norm", as most papers) and raw (what the thesis repo prints).
-- **EER**, equal error rate, lower is better.
-CrowdFormer's frame score = its highest person score in that frame, so both models are measured
-on exactly the same frames and labels.
+## Data
+```bash
+dvc pull                                  # if the data is already on our DVC remote, or:
+python -m src.data.download               # Kaggle zips (or --pack-train/--pack-test DIR)
+dvc add data/raw/shanghaitech && dvc push
+dvc repro split                           # unpack + data card + official split (437 / 330 / 107)
+```
+
+## Run (same commands for every model)
+```bash
+python -m src.training.train      --config configs/astt_baseline.yaml --smoke   # 2-minute test
+python -m src.training.train      --config configs/astt_baseline.yaml           # stopped? run it again
+python -m src.evaluation.evaluate --config configs/astt_baseline.yaml
+python -m src.evaluation.compare                     # all evaluated models + rules -> outputs/comparison/
+python -m src.evaluation.benchmark                   # size + speed of every model
+python -m src.inference.analyze --video clip.mp4 --model aivad_lite             # one video -> result.mp4
+```
+Or with DVC: `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`, `dvc repro compare`.
+Model 3 also needs `python -m src.models.aivad.weights --model aivad` first.
+
+## MLOps
+- **DVC**: data, models and the whole pipeline (`dvc dag`); versions v1-v4 with metadata cards
+  ([docs/versioning.md](docs/versioning.md)); `dvc metrics diff v1.0 v2.0`.
+- **FastAPI**: `uvicorn api.main:app` -> http://localhost:8000/docs
+- **Docker + Prometheus + Grafana**: `docker compose up --build -d` -> API :8000, Grafana :3000
+  (dashboard "DSP391m - Video anomaly detection": serving and live training).
+Details: [docs/mlops.md](docs/mlops.md).
+
+## Where is ...? (for questions in the defence)
+| Question | Answer |
+|---|---|
+| Where is the thesis model? Is it really unchanged? | `src/models/astt_baseline.py` builds it from `third_party/ASTT` (checksums: `python third_party/fetch.py --check`); `pytest tests/test_models.py` checks the 150,579,876 parameters |
+| What did you improve? | `configs/astt_improved.yaml` and `configs/aivad_lite.yaml`, every change marked `[CHANGE]`; reasons in docs/models.md |
+| How is loitering / counter-flow decided? | `src/behavior/loitering.py`, `src/behavior/counter_flow.py`; thresholds in `configs/behavior.yaml` |
+| How is accuracy measured? | `src/evaluation/metrics.py` (one file for all models) |
+| Which videos are train / test? | `data/metadata/split.json`, made by `src/data/split.py` |
+| How do I get exactly version 1 back? | `git checkout v1.0 && dvc pull` |
+| Where are training logs / results? | `outputs/training/<model>/`, `outputs/evaluation/<model>/`, `outputs/comparison/` |

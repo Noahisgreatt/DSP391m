@@ -1,11 +1,33 @@
+# ---- editor / python
 .vscode/
-outputs/
-runs/
-results/
-*.pt
-*.pth
-data/raw/_download/
-data/raw/shanghaitech/
-data/interim/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# ---- data: raw data is versioned by DVC (*.dvc files), the rest is re-created by dvc repro
+data/raw/_kaggle_tmp/
+data/raw/_download/
+data/processed/
+data/features/
+
+# ---- outputs: small JSON / CSV results ARE committed (for `dvc metrics diff`); big files are not
+outputs/training/*/checkpoints/
+outputs/training/*_smoke/
+outputs/evaluation/*_smoke/
+outputs/evaluation/*/scores/
+outputs/behavior/*/events/
+outputs/api/
+outputs/demo/
+*.pth
+*.pt
+*.tmp
+
+# ---- third-party code: fetched by `python third_party/fetch.py` (pinned commits + sha256),
+#      not committed, because their licences don't allow republishing
+third_party/ASTT/
+third_party/AIVAD/
+third_party/AlphaPose/
+
+# ---- pretrained network weights and external downloads (python -m src.models.aivad.weights)
+weights/
+data/external/

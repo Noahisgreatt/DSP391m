@@ -1,0 +1,36 @@
+# Model 3: AI-VAD (Reiss & Hoshen, TMLR 2025), the original networks and settings.
+# Code: third_party/AIVAD (unchanged). No network is trained: pretrained networks describe every
+# object, density estimators fitted on the normal training videos say how unusual it is.
+#   python -m src.training.train       --config configs/aivad.yaml   (extract train attributes + fit)
+#   python -m src.evaluation.evaluate  --config configs/aivad.yaml
+
+model:
+  name: aivad
+  family: aivad
+  features: extract            # extract = run the networks on our frames
+                               # released = the authors' attribute files (exact paper numbers, fast)
+  released_dir: data/external/aivad_features/shanghaitech     # only for features: released
+  objects: maskrcnn            # Mask R-CNN R50-FPN 3x (detectron2), conf 0.8 + moving blobs
+  flow: flownet2               # FlowNet2 at 1024x640
+  pose: fastpose               # AlphaPose FastPose ResNet-50, 17 COCO keypoints
+  appearance: clip             # CLIP ViT-B/16 (computed; not part of the ShanghaiTech score)
+  parameters_total: 333632435  # measured; used for features: released (no networks run)
+
+weights:                       # downloaded by: python -m src.models.aivad.weights --model aivad
+  maskrcnn: weights/maskrcnn_R_50_FPN_3x_f10217.pkl
+  flownet2: weights/FlowNet2_checkpoint.pth.tar
+  fastpose: weights/fast_res50_256x192.pth
+
+scoring:                       # AI-VAD evaluate.py, ShanghaiTech settings
+  attributes: [velocity, pose] # the released code scores ShanghaiTech with velocity + pose
+  also_calibrate: [appearance] # computed too, for the "with appearance" ablation
+  gmm_components: 5
+  calibration_percentile: 99.9
+  smoothing_sigma: 7
+
+eval:
+  batch_size: 1
+
+train:                         # (shared keys; nothing is trained by gradient descent)
+  num_workers: 0
+  amp: false

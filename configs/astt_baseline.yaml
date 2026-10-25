@@ -1,0 +1,42 @@
+# Model 1: the thesis model (ASTT), UNCHANGED. Every value is the original repo default
+# (third_party/ASTT/config.py get_train_config + get_b16_config, train_val_UIT_ADrone_*.py).
+#   python -m src.training.train       --config configs/astt_baseline.yaml
+#   python -m src.evaluation.evaluate  --config configs/astt_baseline.yaml
+
+model:
+  name: astt_baseline
+  pretrained: false           # repo: timm.create_model('vit_base_patch32_384', pretrained=False)
+  image_size: 384             # --image-size 384 (input frames)
+  output_size: 256            # predicted frame (fixed by the repo decoder)
+  num_frames: 4               # 4 past frames -> predict the 5th
+  patch_size: 16              # get_b16_config (only a name in the repo; the STE is ViT-B/32)
+  emb_dim: 768
+  mlp_dim: 1536
+  num_heads: 6
+  num_layers: 2
+  num_classes: 25             # unused by the model
+  attn_dropout_rate: 0.0
+  dropout_rate: 0.1
+
+input:
+  loader: repo                # the repo's data_utils.DataLoader, unchanged:
+  color: bgr                  #   BGR, scaled to [-1, 1]
+  frame_order: newest_first   #   frames concatenated newest-first
+
+train:
+  epochs: 5                   # --epochs 5
+  batch_size: 8               # --batch-size 8 (out of GPU memory? 4 keeps the model the same)
+  optimizer: sgd              # SGD, momentum 0.9
+  lr: 1.0e-4                  # --lr 1e-4
+  backbone_lr: 1.0e-4         # same LR everywhere in the repo
+  wd: 1.0e-4                  # --wd 1e-4
+  scheduler: onecycle         # OneCycleLR, stepped every batch
+  warmup_steps: 500           # --warmup-steps 500
+  train_steps: auto           # repo default 38000 crashes on big data; auto = epochs x batches
+  loss: mse                   # nn.MSELoss on the predicted frame
+  amp: false                  # repo trains in fp32
+  num_workers: 4              # repo DataLoader(num_workers=4)
+  checkpoint_minutes: 20      # save a resume checkpoint this often (not in the repo)
+
+eval:
+  batch_size: 1               # repo test_all_scenes uses batch_size=1

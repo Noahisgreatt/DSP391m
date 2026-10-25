@@ -1,0 +1,11 @@
+# FastAPI service (api/) + monitoring.
+api:
+  model: astt_improved              # astt_baseline | astt_improved | aivad | aivad_lite | none (rules only)
+  checkpoint: null                  # null = outputs/training/<model>/model.pth
+  threshold: null                   # null = EER threshold from outputs/evaluation/<model>/metrics.json
+  device: null                      # null = GPU if available
+  max_upload_mb: 500
+  work_dir: outputs/api             # uploaded videos, frames and result videos
+
+monitoring:
+  training_metrics_port: 8001       # train.py serves live loss / speed here for Prometheus (0 = off)
