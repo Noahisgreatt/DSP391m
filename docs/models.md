@@ -69,8 +69,6 @@ Scoring (AI-VAD `evaluate.py`): velocity -> GMM (5 components); pose / appearanc
 the nearest training sample; each calibrated on the training videos (leave-one-video-out), the
 most unusual object per frame, velocity + pose summed (the released ShanghaiTech setting), Gaussian
 smoothing sigma 7. Paper: 85.9% micro / 89.6% macro AUC on ShanghaiTech.
-Two ways to run it (`model.features`): `extract` = run all networks on our frames;
-`released` = the authors' attribute files, to reproduce their numbers exactly.
 Code is used unchanged; things are plugged in from outside instead of editing it:
 FlowNet2's CUDA-only layers (correlation, resample, channel norm) are re-written in plain
 PyTorch (`src/models/nets.py`, checked value-for-value in `tests/test_aivad.py`); the 1-NN search

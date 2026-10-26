@@ -7,7 +7,6 @@
 model:
   name: aivad_lite
   family: aivad
-  features: extract
   objects: keypointrcnn        # [CHANGE] Keypoint R-CNN: people AND 17 keypoints in one pass
                                #          (replaces Faster R-CNN + AlphaPose: two networks)
   detector_conf: 0.5
@@ -23,6 +22,3 @@ scoring:
   smoothing_sigma: 7
   per_scene: true              # [CHANGE] one model of "normal" per camera (13 cameras differ)
   track_smoothing: 5           # [CHANGE] average a person's score over their last 5 frames
-
-eval: {batch_size: 1}
-train: {num_workers: 0, amp: false}

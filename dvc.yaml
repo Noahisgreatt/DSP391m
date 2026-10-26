@@ -1,9 +1,9 @@
 # DVC pipeline: `dvc dag` draws it, `dvc repro <stage>` runs a stage + everything it needs.
 #   1 data      prepare_shanghaitech, prepare_manual, split                  (src/data.py)
-#   2 behavior  tracking_*, optical_flow_*, behavior_*                        (src/behavior.py)
+#   2 behavior  behavior@shanghaitech, behavior@manual                        (src/behavior.py)
 #   3 models    train@<model> for all four                                    (src/train.py)
 #   4 evaluate  evaluate@<model>, compare, benchmark                          (src/evaluate.py)
-# Versions (git tag + releases/<version>.json): docs/versioning.md.
+# Versions v1.0, v1.1, v2.0 ...: python -m src.release (docs/versioning.md).
 # cache: false = big but re-creatable, kept off the DVC remote. Small JSON / CSV results are
 # committed to git, so `dvc metrics diff v1.0 v2.0` works.
 
@@ -12,8 +12,6 @@ stages:
   prepare_shanghaitech:
     cmd: python -m src.data prepare
     deps: [data/raw/shanghaitech, src/data.py]
-    params:
-      - configs/data.yaml: [shanghaitech.kaggle_train, shanghaitech.kaggle_test]
     outs:
       - data/processed/shanghaitech: {cache: false}
     metrics:
@@ -32,42 +30,21 @@ stages:
   split:
     cmd: python -m src.data split
     deps: [data/metadata/shanghaitech.json, src/data.py]   # the card changes exactly when the data does
-    params:
-      - configs/data.yaml: [shanghaitech.val_fraction, shanghaitech.seed]
     outs:
       - data/metadata/split.json: {cache: false}
 
-  # ------------------------------------------------------------------ 2. behavior (no training)
-  tracking:
-    foreach: [shanghaitech, manual]
-    do:
-      cmd: python -m src.behavior track --dataset ${item}
-      deps: [data/metadata/split.json, "data/metadata/${item}.json", src/behavior.py, src/models/nets.py]
-      params:
-        - configs/behavior.yaml: [frame_size, tracking]
-      outs:
-        - data/features/tracking/${item}:
-            cache: false
-
-  optical_flow:
-    foreach: [shanghaitech, manual]
-    do:
-      cmd: python -m src.behavior flow --dataset ${item}
-      deps: [data/metadata/split.json, "data/metadata/${item}.json", src/behavior.py]
-      params:
-        - configs/behavior.yaml: [frame_size, optical_flow]
-      outs:
-        - data/features/optical_flow/${item}: {cache: false}
-        - data/features/normal_maps/${item}: {cache: false}
-
+  # ------------------------------------------------------------------ 2. behavior rules (no training)
   behavior:
     foreach: [shanghaitech, manual]
     do:
-      cmd: python -m src.behavior detect --dataset ${item}
-      deps: ["data/features/tracking/${item}", "data/features/normal_maps/${item}", src/behavior.py]
+      cmd: python -m src.behavior --dataset ${item}
+      deps: [data/metadata/split.json, "data/metadata/${item}.json", src/behavior.py, src/models/nets.py]
       params:
-        - configs/behavior.yaml: [counter_flow, loitering]
+        - configs/behavior.yaml:
       outs:
+        - data/features/tracking/${item}: {cache: false}
+        - data/features/optical_flow/${item}: {cache: false}
+        - data/features/normal_maps/${item}: {cache: false}
         - outputs/behavior/${item}/events: {cache: false}
       metrics:
         - outputs/behavior/${item}/metrics.json: {cache: false}

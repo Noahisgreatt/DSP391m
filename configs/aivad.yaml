@@ -8,15 +8,11 @@
 model:
   name: aivad
   family: aivad
-  features: extract            # extract = run the networks on our frames
-                               # released = the authors' attribute files (reproduces the paper exactly)
-  released_dir: data/external/aivad_features/shanghaitech
   objects: maskrcnn            # Faster R-CNN R50-FPN, COCO (80 classes), score >= 0.8, + moving blobs
   flow: flownet2               # FlowNet2 (5 networks)
   flow_size: [1024, 640]       # AI-VAD's flow resolution for ShanghaiTech
   pose: fastpose               # AlphaPose FastPose ResNet-50 on every detected person
   appearance: clip             # CLIP ViT-B/16 (computed; AI-VAD's ShanghaiTech score doesn't add it)
-  parameters_total: 331044505  # used only with features: released (no networks run then)
 
 scoring:                       # AI-VAD evaluate.py, ShanghaiTech settings
   attributes: [velocity, pose]
@@ -24,6 +20,3 @@ scoring:                       # AI-VAD evaluate.py, ShanghaiTech settings
   gmm_components: 5
   calibration_percentile: 99.9
   smoothing_sigma: 7
-
-eval: {batch_size: 1}
-train: {num_workers: 0, amp: false}

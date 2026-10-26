@@ -1,5 +1,4 @@
-# Releases
+# Versions
 
-One metadata card per version, written by `python -m src.release <version> --note "..."` just
-before the git tag. `<version>.json` (machine-readable) and `<version>.md` (readable).
-What each version contains and how to compare them: [../docs/versioning.md](../docs/versioning.md).
+Made with `python -m src.release`; details: `python -m src.release --diff vA vB`.
+No version yet: the first one is made when model 1 is trained and evaluated (see ../docs/versioning.md).

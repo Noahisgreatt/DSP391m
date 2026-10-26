@@ -36,8 +36,8 @@ To keep it running after you close the terminal:
 | 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
 | 4 | Pretrained weights into `weights/` (2 GB) | minutes |
 | 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
-| 6 | Train + evaluate model 1, 2, 3, 4 (`--smoke`: tiny runs, a few minutes each) | full: 1-2 days in total |
-| 7 | Print the comparison table and the speed benchmark | - |
+| 6 | Behavior rules, then train + evaluate model 1, 2, 3, 4, saving version v1.0 ... v4.0 after each (`--smoke`: tiny runs) | full: 1-2 days in total |
+| 7 | Print the comparison table, the speed benchmark and the list of versions | - |
 
 ### Results
 | File | Content |
@@ -79,7 +79,7 @@ src/                 ALL code, one file per step
   behavior.py    5  people tracking, loitering, counter-flow
   demo.py        6  one video in -> annotated video + JSON out
   utils.py          settings, paths, reading frames
-  release.py        metadata card of a version (v1, v2, ...)
+  release.py        versions v1.0, v1.1, v2.0 ... with metadata (what changed)
 api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
 tests/            pytest                                          docs/        notes for the report
 third_party/      thesis / AI-VAD / AlphaPose code (downloaded at fixed versions, never edited)
@@ -95,11 +95,26 @@ python -m src.train    --config configs/astt_baseline.yaml   # train one model (
 python -m src.evaluate --config configs/astt_baseline.yaml   # AUC / EER on the 107 test videos
 python -m src.evaluate --compare                             # table of all evaluated models
 python -m src.evaluate --benchmark                           # size and speed of every model
+python -m src.behavior --dataset shanghaitech                # loitering / counter-flow rules
 python -m src.demo --video clip.mp4 --model aivad_lite       # one video -> outputs/demo/clip/
+python -m src.release --note "what changed"                  # save a new version (v1.0, v1.1, v2.0 ...)
 python -m pytest -q tests                                    # everything still works?
 ```
 Same with DVC (records what was run): `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`,
 `dvc repro compare`.
+
+## Versions (v1.0, v1.1, v2.0 ...)
+Every change gets a version with a metadata card (data md5, code, every setting, each model's
+weights md5 and test metrics). The number is chosen automatically: a **new model** -> v2.0, v3.0;
+**anything else changed** (data, code, a setting, retrained weights) -> v2.1, v2.2.
+```bash
+python -m src.release --note "learning rate 2e-4"   # make the next version (git commit + tag)
+python -m src.release --list                       # all versions (also in releases/README.md)
+python -m src.release --diff v1.0 v2.1             # what changed, in words
+git checkout v1.0 && dvc pull                      # exactly that version back
+```
+`run_all.sh` saves one after each model (v1.0 = model 1 ... v4.0 = all four). Details:
+[docs/versioning.md](docs/versioning.md).
 
 ## MLOps
 DVC (data, models, pipeline, versions v1-v4 with metadata cards: [docs/versioning.md](docs/versioning.md)),
@@ -116,4 +131,5 @@ FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), Docker + Prometh
 | How are loitering / counter-flow decided? | `src/behavior.py` (functions `loitering`, `counter_flow`); thresholds in `configs/behavior.yaml` |
 | How is accuracy measured? | `src/evaluate.py` (one metric code for all models) |
 | Which videos are train / test? | `data/metadata/split.json`, made by `src/data.py` |
+| What changed between two versions? | `python -m src.release --diff v1.0 v2.0` (or `dvc metrics diff v1.0 v2.0`) |
 | How do I get exactly version 1 back? | `git checkout v1.0 && dvc pull` |

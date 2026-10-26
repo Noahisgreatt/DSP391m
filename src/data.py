@@ -1,6 +1,6 @@
 """Step 1, DATA: get it, unpack it, split it, and feed it to the models.
 
-    python -m src.data download                       # 2 zips from Kaggle (or --pack-train/--pack-test DIR)
+    python -m src.data download                       # the 2 zips from Kaggle (needs a Kaggle API token)
     python -m src.data prepare                        # unzip ShanghaiTech + data card   (DVC: prepare_shanghaitech)
     python -m src.data manual                         # cut our phone videos into frames (DVC: prepare_manual)
     python -m src.data split                          # official train / test split      (DVC: split)
@@ -39,29 +39,14 @@ TRAIN_RE, TEST_RE = re.compile(r"\d{2}_\d{3}"), re.compile(r"\d{2}_\d{4}")
 
 
 # ====================================================================== download / pack
-def download(cfg, pack_train=None, pack_test=None):
+def download(cfg):
     out = Path(cfg["paths"]["raw_shanghaitech"])
-    out.mkdir(parents=True, exist_ok=True)
-    for part, packed in (("train", pack_train), ("test", pack_test)):
-        dst = out / f"{part}.zip"
-        if dst.exists():
-            print(f"{dst} exists, skipped")
-        elif packed:                    # already unzipped: zip frames + labels only, no compression
-            files = sorted(p for p in Path(packed).rglob("*") if p.suffix.lower() in IMAGE_EXTS | {".npy"})
-            with zipfile.ZipFile(dst.with_suffix(".tmp"), "w", zipfile.ZIP_STORED, allowZip64=True) as z:
-                for k, f in enumerate(files, 1):
-                    z.write(f, f.relative_to(packed).as_posix())
-                    if k % 20000 == 0 or k == len(files):
-                        print(f"  {dst.name}: {k}/{len(files)} files")
-            os.replace(dst.with_suffix(".tmp"), dst)
-        else:                           # Kaggle API token needed (KAGGLE_API_TOKEN)
-            tmp = out / "_kaggle_tmp"
-            tmp.mkdir(exist_ok=True)
-            subprocess.run(["kaggle", "datasets", "download", "-d", cfg["shanghaitech"][f"kaggle_{part}"],
-                            "-p", str(tmp)], check=True)
-            next(tmp.glob("*.zip")).replace(dst)
+    for part in ("train", "test"):
+        if not (out / f"{part}.zip").exists():
+            tmp = out / f"_kaggle_{part}"
+            subprocess.run(["kaggle", "datasets", "download", "-d", cfg["shanghaitech"][f"kaggle_{part}"], "-p", str(tmp)], check=True)
+            next(tmp.glob("*.zip")).replace(out / f"{part}.zip")
             tmp.rmdir()
-    print(f"next:  dvc add {out}  &&  dvc push")
 
 
 # ====================================================================== prepare ShanghaiTech
@@ -184,12 +169,7 @@ def prepare_manual(cfg):
 # ====================================================================== split
 def make_split(cfg) -> dict:
     vids = sorted(d.name for d in frames_dir(cfg, "shanghaitech").iterdir() if d.is_dir())
-    train = [v for v in vids if TRAIN_RE.fullmatch(v)]
-    test = [v for v in vids if TEST_RE.fullmatch(v)]
-    n_val = int(round(len(test) * cfg["shanghaitech"]["val_fraction"]))
-    rng = np.random.RandomState(cfg["shanghaitech"]["seed"])
-    val = sorted(str(x) for x in rng.choice(test, n_val, replace=False)) if n_val else []
-    return {"train": train, "val": val, "test": sorted(set(test) - set(val))}
+    return {"train": [v for v in vids if TRAIN_RE.fullmatch(v)], "test": [v for v in vids if TEST_RE.fullmatch(v)]}
 
 
 def load_split(cfg) -> dict:
@@ -278,23 +258,15 @@ def video_dataset(cfg, video_dir):
 
 # ====================================================================== command line
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["download", "prepare", "manual", "split"])
-    ap.add_argument("--pack-train", type=Path)
-    ap.add_argument("--pack-test", type=Path)
-    a = ap.parse_args()
-    cfg = load_config()
-    if a.step == "download":
-        download(cfg, a.pack_train, a.pack_test)
-    elif a.step == "prepare":
-        prepare_shanghaitech(cfg)
-    elif a.step == "manual":
-        prepare_manual(cfg)
-    else:
+    step = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    step.add_argument("step", choices=["download", "prepare", "manual", "split"])
+    step, cfg = step.parse_args().step, load_config()
+    if step == "split":
         s = make_split(cfg)
         (Path(cfg["paths"]["metadata"]) / "split.json").write_text(json.dumps(s, indent=1))
-        for k in ("train", "val", "test"):
-            print(f"{k:6s} {len(s[k]):4d} videos  e.g. {s[k][:4]}")
+        print(f"train {len(s['train'])} videos, test {len(s['test'])} videos")
+    else:
+        {"download": download, "prepare": prepare_shanghaitech, "manual": prepare_manual}[step](cfg)
 
 
 if __name__ == "__main__":

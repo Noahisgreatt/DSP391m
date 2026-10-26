@@ -104,11 +104,6 @@ def evaluate(config, smoke=False, limit=None):
         if k % 10 == 0 or k == len(vids):
             print(f"  [{k}/{len(vids)}] {time.time() - t0:.0f}s")
     res, per_video = frame_metrics(scores, {v: video_labels(cfg, v, len(s)) for v, s in scores.items()}, scorer.kind)
-    scenes = {}
-    for v, (_, n, y) in per_video.items():                    # AUC per camera (01..13)
-        scenes.setdefault(v[:2], []).append((n, y))
-    res["auc_norm_per_scene"] = {sc: float(roc_auc_score(np.concatenate([y for _, y in l]), np.concatenate([n for n, _ in l])))
-                                 for sc, l in sorted(scenes.items()) if 0 < np.concatenate([y for _, y in l]).mean() < 1}
     res.update(model=cfg["model"]["name"], seconds=round(time.time() - t0),
                fps_scored=round(res["frames"] / max(time.time() - t0, 1e-9), 1))
     out = out_dir(cfg, "evaluation", smoke)
@@ -122,7 +117,7 @@ def evaluate(config, smoke=False, limit=None):
         with open(out / "roc.csv", "w", newline="") as f:
             csv.writer(f).writerows([["fpr", "tpr"]] + [[round(float(fpr[i]), 5), round(float(tpr[i]), 5)] for i in keep])
     (out / "metrics.json").write_text(json.dumps(res, indent=2))
-    print(json.dumps({k: v for k, v in res.items() if k != "auc_norm_per_scene"}, indent=2))
+    print(json.dumps(res, indent=2))
 
 
 # ====================================================================== all models side by side

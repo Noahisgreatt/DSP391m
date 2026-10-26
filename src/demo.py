@@ -54,16 +54,12 @@ class Analyzer:
                     raise SystemExit(msg)
                 print("WARNING:", msg)
                 self.warning, self.name = msg, None
-        if self.name:
+        if self.name:                                     # trained + evaluated (checked above)
             from src.models import scorer
-            self.cfg = load_config(f"configs/{self.name}.yaml")
-            self.scorer = scorer(self.cfg, out_dir(self.cfg, "training") / "model.pth", self.device)
-            self.threshold = threshold or api["threshold"]
-            if self.threshold is None:
-                m = out_dir(self.cfg, "evaluation") / "metrics.json"
-                if not m.exists():
-                    raise SystemExit(f"No threshold: evaluate {self.name} first, or pass --threshold")
-                self.threshold = json.loads(m.read_text())["threshold_raw_at_eer"]
+            self.cfg = cfg
+            self.scorer = scorer(cfg, out_dir(cfg, "training") / "model.pth", self.device)
+            self.threshold = threshold or api["threshold"] or json.loads(
+                (out_dir(cfg, "evaluation") / "metrics.json").read_text())["threshold_raw_at_eer"]
 
     def info(self):
         return {"model": self.name or "none", "device": str(self.device), "threshold": self.threshold,

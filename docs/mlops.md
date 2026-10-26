@@ -8,13 +8,14 @@
   `data/raw/manual`, every `outputs/training/<model>/model.pth`.
   ShanghaiTech is kept as 2 zips because 180,000 small JPEGs are very slow on Google Drive.
 - **Re-created, not pushed** (`cache: false`): unpacked frames, features, checkpoints, scores.
-- **Committed to git** (small): data cards, split, metrics / plots JSON and CSV, release cards.
-- **Pipeline**: `dvc.yaml`, 4 groups of stages: data (`src/data.py`), behavior (`src/behavior.py`),
-  models (`src/train.py`), evaluation + comparison (`src/evaluate.py`);
+- **Committed to git** (small): data cards, split, metrics / plots JSON and CSV, version cards.
+- **Versions** v1.0, v1.1, v2.0 ... with metadata: `python -m src.release` ([versioning.md](versioning.md)).
+- **Pipeline**: `dvc.yaml`: data (`prepare_*`, `split`), `behavior@<dataset>`, `train@<model>`,
+  `evaluate@<model>`, `compare`, `benchmark`;
   `dvc dag` draws it, `dvc repro <stage>` runs a stage and everything it needs.
 - **Parameters**: every `configs/*.yaml` value a stage uses is declared under `params:`, so
   `dvc status` knows when a setting change makes a result out of date.
-- **Metrics / plots**: `dvc metrics show`, `dvc plots show` (training loss, ROC of every model).
+- **Metrics / plots**: `dvc metrics show`, `dvc plots show` (ROC of every model).
 - **Model registry**: `artifacts:` in `dvc.yaml` describes the 4 models (path, type, labels).
 
 ## FastAPI (`api/main.py`, uses `src/demo.py`)
@@ -23,7 +24,7 @@
 |---|---|
 | `GET /health` | status + which model, device, threshold |
 | `POST /analyze` | upload a video -> per-frame scores, abnormal frames, unusual objects (models 3/4), LOITERING / COUNTER_FLOW / TOO_FAST events, link to the result video |
-| `GET /results/{job}` / `.../video` | the JSON / the annotated video again |
+| `GET /results/{job}/video` | the annotated video |
 | `GET /metrics` | Prometheus metrics |
 Served model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|aivad_lite|none`.
 If that model isn't trained + evaluated yet, the API still starts with the behavior rules only and
@@ -40,5 +41,5 @@ Grafana http://localhost:3000 (admin/admin), dashboard **DSP391m - Video anomaly
   **frame-score distribution vs. the threshold and share of abnormal frames: if these drift
   upwards, incoming videos no longer look like the training data (data drift)**.
 - **Training (live)**: `src/train.py` serves its metrics on port 8001 while it runs: loss, learning
-  rate, it/s, progress, time left, epoch, validation AUC, GPU memory.
+  rate, it/s, progress, time left, epoch.
 Prometheus config: `monitoring/prometheus.yml`; dashboard JSON: `monitoring/grafana/dashboards/`.

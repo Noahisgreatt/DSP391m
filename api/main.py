@@ -7,7 +7,6 @@ the model finds abnormal, and a result video. Prometheus metrics at /metrics.
 Endpoints
     GET  /health                 is the service up, which model is loaded
     POST /analyze                form field `file` = video (.mp4/.avi/.mov), ?render=true
-    GET  /results/{job_id}       the JSON result again
     GET  /results/{job_id}/video the result video (boxes, tags, heat-map, score curve)
     GET  /metrics                Prometheus metrics
 Which model is served: configs/api.yaml (api.model), or env
@@ -37,7 +36,6 @@ class M:
     REQUESTS = Counter("vad_api_requests_total", "HTTP requests", ["endpoint", "status"])
     LATENCY = Histogram("vad_api_request_seconds", "HTTP request duration", ["endpoint"],
                         buckets=(0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600))
-    IN_PROGRESS = Gauge("vad_api_requests_in_progress", "Requests being processed")
 
     STEP_SECONDS = Histogram("vad_pipeline_step_seconds", "Time per pipeline step", ["step"],
                              buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300))
@@ -48,8 +46,6 @@ class M:
     ABNORMAL_RATIO = Histogram("vad_abnormal_frame_ratio", "Share of frames above the threshold per video",
                                ["model"], buckets=(0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1))
     EVENTS = Counter("vad_behavior_events_total", "Behavior events detected", ["event"])
-    PEOPLE = Histogram("vad_people_per_video", "People tracked per video",
-                       buckets=(0, 1, 2, 5, 10, 20, 50, 100, 200))
     MODEL = Info("vad_model", "Model being served")
     THRESHOLD = Gauge("vad_model_threshold", "Frame threshold (EER) in use, in the model's score units")
     UNUSUAL = Counter("vad_unusual_objects_total", "Objects models 3/4 found unusual, by attribute", ["attribute"])
@@ -81,15 +77,12 @@ app = FastAPI(title="DSP391m video anomaly detection", version="2.0", lifespan=l
 async def count_requests(request: Request, call_next):
     if request.url.path == "/metrics":
         return await call_next(request)
-    t0 = time.time()
-    M.IN_PROGRESS.inc()
-    status = 500
+    t0, status = time.time(), 500
     try:
         response = await call_next(request)
         status = response.status_code
         return response
     finally:
-        M.IN_PROGRESS.dec()
         route = request.scope.get("route")
         ep = route.path if route else "other"
         M.REQUESTS.labels(ep, str(status)).inc()
@@ -138,19 +131,10 @@ def analyze(file: UploadFile = File(...), render: bool = True):
         M.UNUSUAL.labels(o["attribute"]).inc()
     for name, n in r["event_counts"].items():
         M.EVENTS.labels(name).inc(n)
-    M.PEOPLE.observe(r["people_tracked"])
     r["job_id"] = job
     r["result_video"] = f"/results/{job}/video" if render else None
     r["video"] = file.filename
     return r
-
-
-@app.get("/results/{job_id}")
-def result(job_id: str):
-    f = WORK / Path(job_id).name / "result.json"
-    if not f.exists():
-        raise HTTPException(404, "unknown job")
-    return Response(f.read_text(), media_type="application/json")
 
 
 @app.get("/results/{job_id}/video")

@@ -16,8 +16,6 @@ shanghaitech:
   fps: 25
   # Official Campus split, rebuilt from the video names:
   #   XX_YYY  = 330 training videos (normal only)    XX_YYYY = 107 test videos (frame labels)
-  val_fraction: 0.0         # share of test videos moved to validation (0 = none, like papers)
-  seed: 2020
 
 manual:
   video_exts: [.mp4, .avi, .mov, .mkv, .MP4, .AVI, .MOV, .MKV]

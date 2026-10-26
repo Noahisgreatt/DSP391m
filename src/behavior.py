@@ -1,11 +1,11 @@
 """Step 5, BEHAVIOR: who is LOITERING, who moves AGAINST the crowd (counter-flow), who is much
 FASTER than the crowd. No training: people tracking + optical flow + rules.
 
-    python -m src.behavior track  --dataset shanghaitech   # people + tracks   (DVC: tracking_*)
-    python -m src.behavior flow   --dataset shanghaitech   # normal directions (DVC: optical_flow_*)
-    python -m src.behavior detect --dataset shanghaitech   # the events        (DVC: behavior_*)
-(--dataset manual for our phone videos; ShanghaiTech: tracking on the test videos, flow on the
-normal training videos.) Thresholds: configs/behavior.yaml.
+    python -m src.behavior --dataset shanghaitech        (DVC: behavior@shanghaitech)
+    python -m src.behavior --dataset manual              our phone videos (DVC: behavior@manual)
+Three steps, each cached per video (a stopped run continues): 1 track the people (test videos),
+2 learn each camera's normal walking direction (normal training videos), 3 apply the rules.
+Thresholds: configs/behavior.yaml.
 
 Out: data/features/tracking/<dataset>/<video>.npz        boxes, track ids, velocities
      data/features/normal_maps/<dataset>/<scene>.npz     each camera's normal walking direction
@@ -35,6 +35,13 @@ DIRECTIONS = ["right", "down-right", "down", "down-left", "left", "up-left", "up
 
 
 # ====================================================================== 1. people and tracks
+def per_person(tracks):
+    """Row indices of each tracked person, in time order. tracks: (n, 7) frame, id, box, score."""
+    for tid in np.unique(tracks[:, 1]):
+        idx = np.flatnonzero(tracks[:, 1] == tid)
+        yield tid, idx[np.argsort(tracks[idx, 0])]
+
+
 def iou(a, b):
     """(n, 4) x (m, 4) -> (n, m) intersection over union."""
     tl, br = np.maximum(a[:, None, :2], b[None, :, :2]), np.minimum(a[:, None, 2:], b[None, :, 2:])
@@ -88,9 +95,7 @@ def track_velocities(tracks, window=8, smooth=5, min_speed=0.4):
     if len(tracks) == 0:
         return vel, np.zeros(0, bool)
     centres = np.stack([(tracks[:, 2] + tracks[:, 4]) / 2, (tracks[:, 3] + tracks[:, 5]) / 2], 1)
-    for tid in np.unique(tracks[:, 1]):
-        idx = np.where(tracks[:, 1] == tid)[0]
-        idx = idx[np.argsort(tracks[idx, 0])]
+    for _, idx in per_person(tracks):
         f, c = tracks[idx, 0], centres[idx]
         if smooth > 1 and len(c) > 1:
             k = min(smooth, len(c))
@@ -252,9 +257,7 @@ def counter_flow(tracks, vel, moving, normal, cons, size, fps, c):
     bhs, crowd_bhs = speed / np.maximum(bh, 1) * fps, crowd_s * fps
     f_raw = moving & (bhs >= c["fast_bh_per_s"]) & (np.isnan(crowd_bhs) | (bhs >= c["fast_ratio"] * np.nan_to_num(crowd_bhs)))
     run = max(1, int(round(c["min_seconds"] * fps)))
-    for tid in np.unique(tracks[:, 1]):
-        idx = np.where(tracks[:, 1] == tid)[0]
-        idx = idx[np.argsort(tracks[idx, 0])]
+    for _, idx in per_person(tracks):
         against[idx[_sustain(a_raw, idx, run)]] = True
         fast[idx[_sustain(f_raw, idx, run)]] = True
     return against, fast
@@ -266,9 +269,7 @@ def loitering(tracks, fps, c):
     out = np.zeros(len(tracks), bool)
     cx, cy = (tracks[:, 2] + tracks[:, 4]) / 2, (tracks[:, 3] + tracks[:, 5]) / 2
     win = c["seconds"] * fps
-    for tid in np.unique(tracks[:, 1]):
-        idx = np.where(tracks[:, 1] == tid)[0]
-        idx = idx[np.argsort(tracks[idx, 0])]
+    for _, idx in per_person(tracks):
         f, pts = tracks[idx, 0], np.stack([cx[idx], cy[idx]], 1)
         radius, start = c["radius_boxes"] * float(np.median(tracks[idx, 5] - tracks[idx, 3])), 0
         for k in range(len(idx)):
@@ -296,9 +297,7 @@ def detect_events(cfg, tracks, vel, moving, normal, cons, fps):
 def summarize(tracks, flags, fps):
     """Per-row flags -> one event per person and type, with start / end times."""
     events, gap = [], int(fps * 0.5)
-    for tid in np.unique(tracks[:, 1]):
-        idx = np.where(tracks[:, 1] == tid)[0]
-        idx = idx[np.argsort(tracks[idx, 0])]
+    for tid, idx in per_person(tracks):
         for bit, (name, reason) in EVENTS.items():
             fr = tracks[idx[(flags[idx] & bit) > 0], 0].astype(int)
             if not len(fr):
@@ -314,78 +313,79 @@ def summarize(tracks, flags, fps):
     return sorted(events, key=lambda e: e["start_frame"])
 
 
-# ====================================================================== command line (DVC stages)
+# ====================================================================== the three steps for a dataset
+def track_all(cfg, dataset, vids):
+    todo = [(v, d) for v, d in vids if not features_path(cfg, "tracking", dataset, v).exists()]
+    tracker, t0 = PeopleTracker(cfg) if todo else None, time.time()
+    for k, (v, d) in enumerate(todo, 1):
+        r = tracker.video(list_frames(d))
+        features_path(cfg, "tracking", dataset, v).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(features_path(cfg, "tracking", dataset, v), **r)
+        print(f"track [{k}/{len(todo)}] {v}: {len(np.unique(r['tracks'][:, 1]))} people ({time.time() - t0:.0f}s)")
+
+
+def flow_all(cfg, dataset, vids):
+    todo = [(v, d) for v, d in vids if not features_path(cfg, "optical_flow", dataset, v).exists()]
+    with ProcessPoolExecutor(max_workers=cfg["run"]["workers"]) as pool:
+        jobs = [pool.submit(flow_video, v, d, features_path(cfg, "optical_flow", dataset, v), cfg) for v, d in todo]
+        for k, j in enumerate(as_completed(jobs), 1):
+            print(f"flow [{k}/{len(todo)}] {j.result()}")
+    scenes = defaultdict(list)
+    for v, _ in vids:
+        scenes[scene_of(dataset, v)].append(features_path(cfg, "optical_flow", dataset, v))
+    for sc, files in scenes.items():
+        normal, cons = normal_map(files, cfg["optical_flow"]["min_cell_samples"])
+        features_path(cfg, "normal_maps", dataset, sc).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(features_path(cfg, "normal_maps", dataset, sc), normal=normal, consistency=cons)
+
+
+def detect_all(cfg, dataset, vids):
+    out = Path(cfg["paths"]["outputs"]) / "behavior" / dataset
+    (out / "events").mkdir(parents=True, exist_ok=True)
+    R, C = cfg["optical_flow"]["grid"]
+    counts, ys, ff = {n: 0 for n, _ in EVENTS.values()}, [], []
+    for vid, _ in vids:
+        tr = np.load(features_path(cfg, "tracking", dataset, vid))
+        mp = features_path(cfg, "normal_maps", dataset, scene_of(dataset, vid))
+        normal, cons = ((np.load(mp)["normal"], np.load(mp)["consistency"]) if mp.exists()
+                        else (np.zeros((R, C, 2), np.float32), np.zeros((R, C), np.float32)))
+        fps = video_fps(cfg, dataset, vid)
+        flags = detect_events(cfg, tr["tracks"], tr["velocity"], tr["moving"], normal, cons, fps)
+        frame_flags = np.zeros(len(tr["frame_names"]), np.uint8)
+        np.bitwise_or.at(frame_flags, tr["tracks"][:, 0].astype(int), flags)
+        events = summarize(tr["tracks"], flags, fps)
+        np.savez_compressed(out / "events" / f"{vid}.npz", flags=flags, frame_flags=frame_flags)
+        (out / "events" / f"{vid}.json").write_text(json.dumps({"video": vid, "fps": fps, "events": events}, indent=2))
+        for e in events:
+            counts[e["event"]] += 1
+        if dataset == "shanghaitech":
+            from src.data import video_labels
+            ys.append(video_labels(cfg, vid, len(frame_flags)))
+            ff.append(frame_flags > 0)
+    metrics = {"videos": len(vids), "events": counts}
+    if ys:
+        from src.evaluate import binary_metrics
+        metrics["frame_level"] = binary_metrics(np.concatenate(ys), np.concatenate(ff))
+    (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    print(json.dumps(metrics, indent=2))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["track", "flow", "detect"])
     ap.add_argument("--dataset", required=True, choices=["shanghaitech", "manual"])
     ap.add_argument("--limit", type=int, help="only N videos (quick test)")
     a = ap.parse_args()
     cfg = load_config("configs/behavior.yaml")
     vids = list_videos(frames_dir(cfg, a.dataset))
+    test, normal = vids, vids                                  # manual: the same videos for both
     if a.dataset == "shanghaitech":
         from src.data import load_split
         split = load_split(cfg)
-        keep = set(split["train"]) if a.step == "flow" else set(split["test"]) | set(split["val"])
-        vids = [(v, d) for v, d in vids if v in keep]
-    vids = vids[: a.limit]
-    t0 = time.time()
-
-    if a.step == "track":                                    # test videos: who is where
-        todo = [(v, d) for v, d in vids if not features_path(cfg, "tracking", a.dataset, v).exists()]
-        features_path(cfg, "tracking", a.dataset, "x").parent.mkdir(parents=True, exist_ok=True)
-        tracker = PeopleTracker(cfg) if todo else None
-        for k, (v, d) in enumerate(todo, 1):
-            r = tracker.video(list_frames(d))
-            np.savez_compressed(features_path(cfg, "tracking", a.dataset, v), **r)
-            print(f"[{k}/{len(todo)}] {v}: {len(r['frame_names'])} frames, "
-                  f"{len(np.unique(r['tracks'][:, 1]))} people ({time.time() - t0:.0f}s)")
-
-    elif a.step == "flow":                                   # normal videos: usual directions
-        todo = [(v, d) for v, d in vids if not features_path(cfg, "optical_flow", a.dataset, v).exists()]
-        with ProcessPoolExecutor(max_workers=cfg["run"]["workers"]) as pool:
-            jobs = [pool.submit(flow_video, v, d, features_path(cfg, "optical_flow", a.dataset, v), cfg) for v, d in todo]
-            for k, j in enumerate(as_completed(jobs), 1):
-                print(f"[{k}/{len(todo)}] {j.result()} ({time.time() - t0:.0f}s)")
-        scenes = defaultdict(list)
-        for v, _ in vids:
-            scenes[scene_of(a.dataset, v)].append(features_path(cfg, "optical_flow", a.dataset, v))
-        for sc, files in scenes.items():
-            normal, cons = normal_map(files, cfg["optical_flow"]["min_cell_samples"])
-            p = features_path(cfg, "normal_maps", a.dataset, sc)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(p, normal=normal, consistency=cons)
-        print(f"{len(scenes)} normal direction maps")
-
-    else:                                                    # the events
-        out = Path(cfg["paths"]["outputs"]) / "behavior" / a.dataset
-        (out / "events").mkdir(parents=True, exist_ok=True)
-        R, C = cfg["optical_flow"]["grid"]
-        counts, ys, ff = {n: 0 for n, _ in EVENTS.values()}, [], []
-        for f in sorted(features_path(cfg, "tracking", a.dataset, "x").parent.glob("*.npz")):
-            vid, tr = f.stem, np.load(f)
-            mp = features_path(cfg, "normal_maps", a.dataset, scene_of(a.dataset, vid))
-            normal, cons = ((np.load(mp)["normal"], np.load(mp)["consistency"]) if mp.exists()
-                            else (np.zeros((R, C, 2), np.float32), np.zeros((R, C), np.float32)))
-            fps = video_fps(cfg, a.dataset, vid)
-            flags = detect_events(cfg, tr["tracks"], tr["velocity"], tr["moving"], normal, cons, fps)
-            frame_flags = np.zeros(len(tr["frame_names"]), np.uint8)
-            np.bitwise_or.at(frame_flags, tr["tracks"][:, 0].astype(int), flags)
-            events = summarize(tr["tracks"], flags, fps)
-            np.savez_compressed(out / "events" / f"{vid}.npz", flags=flags, frame_flags=frame_flags)
-            (out / "events" / f"{vid}.json").write_text(json.dumps({"video": vid, "fps": fps, "events": events}, indent=2))
-            for e in events:
-                counts[e["event"]] += 1
-            if a.dataset == "shanghaitech":
-                from src.data import video_labels
-                ys.append(video_labels(cfg, vid, len(frame_flags)))
-                ff.append(frame_flags > 0)
-        metrics = {"videos": len(list((out / "events").glob("*.json"))), "events": counts}
-        if ys:
-            from src.evaluate import binary_metrics
-            metrics["frame_level"] = binary_metrics(np.concatenate(ys), np.concatenate(ff))
-        (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
-        print(json.dumps(metrics, indent=2))
+        test, normal = [x for x in vids if x[0] in split["test"]], [x for x in vids if x[0] in split["train"]]
+    test, normal = test[: a.limit], normal[: a.limit]
+    track_all(cfg, a.dataset, test)
+    flow_all(cfg, a.dataset, normal)
+    detect_all(cfg, a.dataset, test)
 
 
 if __name__ == "__main__":

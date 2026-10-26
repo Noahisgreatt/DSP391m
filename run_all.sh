@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# ONE command for everything: setup -> data -> 4 models (train + evaluate) -> comparison + benchmark.
+# ONE command for everything: setup -> data -> 4 models (train + evaluate, a version after each)
+# -> comparison + benchmark.
 #
 #   bash run_all.sh            full run (days on one GPU). Stopped? Run it again: it continues.
 #   bash run_all.sh --smoke    quick check that every step works (tiny training runs)
@@ -64,22 +65,26 @@ if [[ -d data/raw/manual ]] || dvc pull -q data/raw/manual.dvc 2>/dev/null; then
 echo "phone videos: $MANUAL (only used by the behavior rules)"
 dvc repro split                                   # unpack + official split: 330 train / 107 test videos
 
-step "6/7 Models: train + evaluate ($MODE)"
+step "6/7 Behavior rules + models: train + evaluate ($MODE)"
 if [[ $MODE == smoke ]]; then
+    python -m src.behavior --dataset shanghaitech --limit 1
     for m in "${MODELS[@]}"; do
         echo "--- $m"
         python -m src.train    --config "configs/$m.yaml" --smoke
         python -m src.evaluate --config "configs/$m.yaml" --smoke
     done
-else
-    dvc repro compare benchmark                   # train@4 models -> evaluate@4 -> compare, benchmark
-    [[ $MANUAL == yes ]] && dvc repro behavior@manual
+    step "7/7 Done: every step works. Full run: bash run_all.sh"
+    exit 0
 fi
+dvc repro behavior@shanghaitech                   # the rules need no training
+if [[ $MANUAL == yes ]]; then dvc repro behavior@manual; fi
+for m in "${MODELS[@]}"; do                       # model by model; a version after each:
+    dvc repro "evaluate@$m"                       # v1.0 = model 1, v2.0 = + model 2, ... (docs/versioning.md)
+    python -m src.release --note "$m trained + evaluated" || true    # "nothing changed" = no new version
+done
+dvc repro compare benchmark
 
 step "7/7 Results"
-if [[ $MODE == smoke ]]; then
-    echo "every step works. Full run: bash run_all.sh"
-else
-    cat outputs/comparison/comparison.md outputs/comparison/benchmark.md
-    echo; echo "files: outputs/comparison/ (table, ROC curves), outputs/evaluation/<model>/metrics.json"
-fi
+cat outputs/comparison/comparison.md outputs/comparison/benchmark.md
+python -m src.release --list
+echo "upload code, versions, data and models:  git push --follow-tags && dvc push"

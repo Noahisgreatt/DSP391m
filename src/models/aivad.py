@@ -25,7 +25,6 @@ All networks: src/models/nets.py (our code + pretrained weights). AI-VAD's own c
 """
 from __future__ import annotations
 
-import csv
 import importlib
 import json
 import sys
@@ -41,10 +40,10 @@ from scipy.ndimage import gaussian_filter1d
 from sklearn.mixture import GaussianMixture
 
 from src.models import nets
-from src.utils import IMAGE_EXTS, config_hash, frames_dir, git_commit, list_frames, out_dir
+from src.utils import config_hash, frames_dir, git_commit, list_frames, out_dir
 
 AIVAD = nets.ROOT / "third_party" / "AIVAD"
-POSE_W, POSE_H = 48.0, 112.0          # pose box size, estimated from the authors' released pose features
+POSE_W, POSE_H = 48.0, 112.0          # AI-VAD's pose box size (estimated from the authors' pose features)
 
 
 # ====================================================================== AI-VAD's own code
@@ -384,35 +383,6 @@ class Density:
                 "per_attribute": per_att, "objects": obj}
 
 
-# ====================================================================== the authors' released attributes
-def load_released(cfg, split, videos):
-    """AI-VAD's attribute files (one entry per frame, videos in name order), cut per video.
-    For `features: released`: reproduces the paper's numbers without running the networks."""
-    d = Path(cfg["model"]["released_dir"]) / split
-    root = frames_dir(cfg, "shanghaitech")
-    counts = [sum(1 for f in (root / v).iterdir() if f.suffix.lower() in IMAGE_EXTS) for v in videos]
-    per_frame = lambda f: list(np.load(d / f, allow_pickle=True))
-    vel, pose = per_frame("velocity.npy"), per_frame("pose.npy")
-    deep = per_frame("deep_features.npy") if (d / "deep_features.npy").exists() else None
-    if len(vel) != sum(counts) or len(pose) != sum(counts):
-        raise SystemExit(f"released {split} attributes cover {len(vel)} frames, our videos {sum(counts)}: the frame "
-                         "counts differ, so they can't be matched to videos. Use features: extract.")
-    out, start = {}, 0
-    for v, n in zip(videos, counts):
-        fr = range(start, start + n)
-        rows = [np.asarray(vel[i], np.float32).reshape(-1, 8) for i in fr]
-        prow = [np.asarray(pose[i], np.float32).reshape(-1, 34) for i in fr]
-        f = {"n_frames": np.array(n), "frame": np.concatenate([np.full(len(r), t, np.int32) for t, r in enumerate(rows)]),
-             "velocity": np.concatenate(rows), "pose": np.concatenate(prow),
-             "pose_frame": np.concatenate([np.full(len(p), t, np.int32) for t, p in enumerate(prow)])}
-        f["ids"], f["mean_flow"] = -np.ones(len(f["frame"]), np.int64), np.zeros((len(f["frame"]), 2), np.float32)
-        f["pose_object"] = -np.ones(len(f["pose"]), np.int64)
-        if deep is not None:
-            f["deep"] = np.concatenate([np.asarray(deep[i], np.float32).reshape(-1, 512) for i in fr]).astype(np.float16)
-        out[v], start = f, start + n
-    return out
-
-
 # ====================================================================== 3. "training" and scoring
 def cache_dir(cfg, split, smoke=False):
     return Path(cfg["paths"]["features"]) / (cfg["model"]["name"] + ("_smoke" if smoke else "")) / split
@@ -433,25 +403,18 @@ def fit(cfg, smoke=False, fresh=False):
         import shutil
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
-    split = load_split(cfg)
-    vids = split["train"][:2] if smoke else split["train"]
-    t0, params = time.time(), {"Total": cfg["model"].get("parameters_total")}
-    if cfg["model"]["features"] == "released":
-        feats = load_released(cfg, "train", vids)
-    else:
-        ex = Extractor(cfg, device)
-        params = count_parameters(ex)
-        print(f"{cfg['model']['name']}: {params['Total']:,} parameters in its networks, on {device}")
-        feats, log = {}, []
-        for k, v in enumerate(vids, 1):                     # cached per video: a stopped run continues
-            f = ex.video(frames_dir(cfg, "shanghaitech") / v, cache_dir(cfg, "train", smoke) / f"{v}.npz",
-                         30 if smoke else None)
-            feats[v] = f
-            fps = float(f["n_frames"]) / max(float(f["seconds"]), 1e-9)
-            log.append([k, v, int(f["n_frames"]), len(f["frame"]), round(fps, 2), round((time.time() - t0) / 60, 2)])
-            print(f"[{k}/{len(vids)}] {v}: {int(f['n_frames'])} frames, {len(f['frame'])} objects, {len(f['pose'])} poses ({fps:.1f} fps)")
-        with open(out / "log.csv", "w", newline="") as fh:
-            csv.writer(fh).writerows([["step", "video", "frames", "objects", "fps", "minutes"]] + log)
+    vids = load_split(cfg)["train"][: 2 if smoke else None]
+    t0, ex = time.time(), Extractor(cfg, device)
+    params = count_parameters(ex)
+    print(f"{cfg['model']['name']}: {params['Total']:,} parameters in its networks, on {device}")
+    feats, log = {}, ["step,video,frames,objects,fps,minutes"]
+    for k, v in enumerate(vids, 1):                         # cached per video: a stopped run continues
+        f = feats[v] = ex.video(frames_dir(cfg, "shanghaitech") / v, cache_dir(cfg, "train", smoke) / f"{v}.npz",
+                                30 if smoke else None)
+        fps = float(f["n_frames"]) / max(float(f["seconds"]), 1e-9)
+        log.append(f"{k},{v},{int(f['n_frames'])},{len(f['frame'])},{fps:.2f},{(time.time() - t0) / 60:.2f}")
+        print(f"[{k}/{len(vids)}] {v}: {int(f['n_frames'])} frames, {len(f['frame'])} objects, {len(f['pose'])} poses ({fps:.1f} fps)")
+    (out / "log.csv").write_text("\n".join(log) + "\n")
     print("fitting the density estimators (leave-one-video-out calibration) ...")
     density = Density(cfg)
     calib = density.fit(feats)
@@ -459,7 +422,7 @@ def fit(cfg, smoke=False, fresh=False):
     (out / "run.json").write_text(json.dumps({
         "model": cfg["model"]["name"], "config_hash": config_hash({k: cfg[k] for k in ("model", "scoring")}),
         "git_commit": git_commit(), "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "device": str(device), "parameters": params, "split": {k: len(v) for k, v in split.items()}, "config": cfg},
+        "device": str(device), "parameters": params, "train_videos": len(vids), "config": cfg},
         indent=2, default=str))
     (out / "metrics.json").write_text(json.dumps({
         "train_videos": len(feats), "train_frames": int(sum(int(f["n_frames"]) for f in feats.values())),
@@ -477,14 +440,10 @@ class Scorer:
         self.cfg, self.device, self.smoke, self.extractor = cfg, device, smoke, extractor
         self.density = Density(cfg)
         self.density.state = torch.load(checkpoint, map_location="cpu", weights_only=False)["state"]
-        self._released = None
 
     def features(self, video_dir, vid, cache=True, max_frames=None):
         from src.data import load_split
         test = load_split(self.cfg)["test"] if (Path(self.cfg["paths"]["metadata"]) / "split.json").exists() else []
-        if self.cfg["model"]["features"] == "released" and vid in test:
-            self._released = self._released or load_released(self.cfg, "test", test)
-            return self._released[vid]
         if self.extractor is None:
             self.extractor = Extractor(self.cfg, self.device)
         cache_file = cache_dir(self.cfg, "test", self.smoke) / f"{vid}.npz" if cache and vid in test else None

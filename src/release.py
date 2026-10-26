@@ -1,133 +1,191 @@
-"""Write the metadata card of a project version, before tagging it in git.
+"""VERSIONS (v1.0, v1.1, v2.0 ...): every time something changes, save a version.
 
-    python -m src.release v1.0 --note "data + model 1 (thesis ASTT)"
-    python -m src.release v2.0 --note "model 2 (improved ASTT)"
-    python -m src.release v3.0 --note "model 3 (AI-VAD)"
-    python -m src.release v4.0 --note "model 4 (AI-VAD Lite) + full comparison"
+    python -m src.release --note "model 1 trained"    # compare with the last version -> make the next one
+    python -m src.release --list                      # all versions, one line each (also releases/README.md)
+    python -m src.release --diff v1.0 v1.1            # exactly what changed between two versions
 
-Out: releases/<version>.json   everything that defines this version (machine-readable)
-     releases/<version>.md     the same as a short readable page
-It collects: git commit, data versions (DVC hashes + data cards), every trained model (config,
-parameters, weights hash, training time), evaluation metrics, behavior metrics, comparison, and
-the software versions. Then tag it (the script prints the exact commands):
-     git add releases dvc.lock && git commit -m "release v1.0" && git tag -a v1.0 -m "..." && dvc push
-Later:  git checkout v1.0 && dvc pull     brings back exactly that code, data and models.
-        dvc metrics diff v1.0 v2.0        what changed in the numbers.
+The number is decided for you, from what changed since the last version:
+    MAJOR  v1.0 -> v2.0   a model was added (v1 = model 1 ... v4 = all four models)
+    MINOR  v1.0 -> v1.1   same models, but the data, the code, a setting or the trained weights changed
+    none                  nothing changed: no new version
+A version = a git tag + releases/<version>.json (its metadata card, below). The tag pins the code and
+dvc.lock; dvc.lock pins the data and every model file by md5 (stored on the DVC remote), so
+    git checkout v1.0 && dvc pull        brings back exactly the code, data and models of v1.0
+    dvc metrics diff v1.0 v2.0           DVC's own table of the numbers that changed
+    dvc params diff v1.0 v2.0            DVC's own table of the settings that changed
+Metadata card: date, git commit, note; data (md5 + size of each DVC-tracked dataset, videos, frames,
+train / test split); code (md5 of src/ + api/); every setting (configs/*.yaml); per model: parameters,
+md5 of the trained weights, test metrics (AUC micro / per-video / macro, EER, frames/s); behavior rules
+metrics; software versions.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from src.utils import git_commit, load_config
-
 MODELS = ("astt_baseline", "astt_improved", "aivad", "aivad_lite")
+REL = Path("releases")
+METRICS = ("auc_raw", "auc_norm", "auc_macro", "eer", "fps_scored")
 
 
-def read_json(p: Path):
-    return json.loads(p.read_text()) if p.exists() else None
+def md5(paths) -> str:
+    h = hashlib.md5()
+    for p in sorted(paths):
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    return h.hexdigest()
 
 
-def dvc_hashes() -> dict:
-    """md5 of every DVC-tracked input / output (data/raw/*.dvc + dvc.lock)."""
+def read(p):
+    p = Path(p)
+    return (json.loads if p.suffix == ".json" else yaml.safe_load)(p.read_text()) if p.exists() else None
+
+
+def git(*args) -> str:
+    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    if r.returncode:
+        raise SystemExit(f"git {args[0]} failed: {r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+# ---------------------------------------------------------------- what the project is right now
+def snapshot(note="") -> dict:
+    data = {}
+    for f in sorted(Path("data/raw").glob("*.dvc")):              # DVC-tracked data (md5 = version of the data)
+        o = read(f)["outs"][0]
+        data[o["path"]] = {"md5": o["md5"], "size_gb": round(o.get("size", 0) / 1e9, 2), "files": o.get("nfiles")}
+    sh, split = read("data/metadata/shanghaitech.json") or {}, read("data/metadata/split.json") or {}
+    data["videos"] = {"shanghaitech": sh.get("videos"), "frames": sh.get("frames"),
+                      "train": len(split.get("train", [])), "test": len(split.get("test", [])),
+                      "manual": (read("data/metadata/manual.json") or {}).get("videos")}
+    models = {}
+    for m in MODELS:
+        w, ev = Path(f"outputs/training/{m}/model.pth"), read(f"outputs/evaluation/{m}/metrics.json")
+        if w.exists():
+            models[m] = {"parameters": ((read(f"outputs/training/{m}/run.json") or {}).get("parameters") or {}).get("Total"),
+                         "weights_md5": md5([w]), "test": {k: ev.get(k) for k in METRICS} if ev else None}
+    try:
+        import torch
+        sw = {"python": platform.python_version(), "torch": torch.__version__, "cuda": torch.version.cuda,
+              "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}
+    except ImportError:
+        sw = {"python": platform.python_version()}
+    return {"note": note, "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "git_commit": git("rev-parse", "--short", "HEAD"), "data": data,
+            "code_md5": md5([*Path("src").rglob("*.py"), *Path("api").rglob("*.py")]),
+            "settings": {f.stem: read(f) for f in sorted(Path("configs").glob("*.yaml"))},
+            "models": models, "behavior": read("outputs/behavior/shanghaitech/metrics.json"), "software": sw}
+
+
+# ---------------------------------------------------------------- comparing two cards
+def flat(d, pre=""):
     out = {}
-    for f in sorted(Path("data/raw").glob("*.dvc")):
-        o = yaml.safe_load(f.read_text())["outs"][0]
-        out[f"data/raw/{o['path']}"] = {"md5": o.get("md5"), "size": o.get("size"), "files": o.get("nfiles")}
-    lock = Path("dvc.lock")
-    if lock.exists():
-        for stage in (yaml.safe_load(lock.read_text()) or {}).get("stages", {}).values():
-            for o in stage.get("outs", []):
-                if o["path"].endswith("model.pth"):
-                    out[o["path"]] = {"md5": o.get("md5"), "size": o.get("size")}
+    for k, v in (d or {}).items():
+        out.update(flat(v, f"{pre}{k}.") if isinstance(v, dict) else {f"{pre}{k}": v})
     return out
 
 
-def software() -> dict:
-    v = {"python": platform.python_version()}
-    for mod in ("torch", "timm", "ultralytics", "dvc", "fastapi"):
-        try:
-            v[mod] = __import__(mod).__version__
-        except Exception:
-            pass
-    try:
-        import torch
-        v["cuda"] = torch.version.cuda
-        v["gpu"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
-    except Exception:
-        pass
-    return v
+def changes(old: dict, new: dict) -> list[str]:
+    """Human-readable list of everything that differs between two cards."""
+    out = []
+    for name in sorted(set(old["data"]) | set(new["data"])):
+        a, b = old["data"].get(name), new["data"].get(name)
+        if a != b:
+            out.append(f"data {name}: {a} -> {b}")
+    if old["code_md5"] != new["code_md5"]:
+        out.append("code (src/, api/) changed")
+    a, b = flat(old["settings"]), flat(new["settings"])
+    out += [f"setting {k}: {a.get(k)} -> {b.get(k)}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
+    for m in MODELS:
+        a, b = old["models"].get(m), new["models"].get(m)
+        if a and not b:
+            out.append(f"{m}: removed")
+        elif b and not a:
+            auc = (b["test"] or {}).get("auc_raw")
+            out.append(f"{m}: ADDED ({b['parameters'] or 0:,} parameters" + (f", AUC {auc * 100:.1f}%)" if auc is not None else ")"))
+        elif a and b:
+            if a["weights_md5"] != b["weights_md5"]:
+                out.append(f"{m}: retrained (new weights)")
+            ta, tb = a["test"] or {}, b["test"] or {}
+            for k in METRICS:
+                if ta.get(k) != tb.get(k) and tb.get(k) is not None:
+                    pct = k != "fps_scored"
+                    f = (lambda v: "-" if v is None else f"{v * 100:.1f}%") if pct else (lambda v: f"{v}")
+                    delta = f" ({(tb[k] - ta[k]) * 100:+.1f})" if pct and ta.get(k) is not None else ""
+                    out.append(f"{m}: {k} {f(ta.get(k))} -> {f(tb[k])}{delta}")
+    return out
+
+
+def versions() -> list[str]:
+    key = lambda v: tuple(int(x) for x in v[1:].split("."))
+    return sorted((f.stem for f in REL.glob("v*.json")), key=key)
+
+
+def write_index():
+    """releases/README.md: every version in one table (readable on GitHub)."""
+    rows = ["# Versions", "", "Made with `python -m src.release`; details: `python -m src.release --diff vA vB`.", "",
+            "| Version | Date | Built from commit | Models (AUC micro on the test set) | Data | Note |", "|---|---|---|---|---|---|"]
+    for v in reversed(versions()):
+        c = read(REL / f"{v}.json")
+        ms = ", ".join(f"{m} {((d['test'] or {}).get('auc_raw') or 0) * 100:.1f}%" for m, d in c["models"].items()) or "-"
+        rows.append(f"| **{v}** | {c['created_utc'][:10]} | `{c['git_commit']}` | {ms} | "
+                    f"{c['data']['videos']['train']} train / {c['data']['videos']['test']} test videos | {c['note']} |")
+    (REL / "README.md").write_text("\n".join(rows) + "\n")
+
+
+# ---------------------------------------------------------------- commands
+def release(note):
+    trained = [f"evaluate@{m}" for m in MODELS if Path(f"outputs/training/{m}/model.pth").exists()]
+    if trained and subprocess.run(["dvc", "status", "-q", *trained], capture_output=True).returncode:
+        print("warning: some results are older than their code / settings (dvc status): run `dvc repro` first "
+              "if you want this version to match")
+    new, vs = snapshot(note), versions()
+    if not vs:
+        n = max(1, len(new["models"]))
+        version, what = f"v{n}.0", ["first version"]
+    else:
+        old = read(REL / f"{vs[-1]}.json")
+        what = changes(old, new)
+        if not what:
+            raise SystemExit(f"nothing changed since {vs[-1]}: no new version")
+        major, minor = (int(x) for x in vs[-1][1:].split("."))
+        added = [m for m in new["models"] if m not in old["models"]]
+        version = f"v{major + len(added)}.0" if added else f"v{major}.{minor + 1}"
+    REL.mkdir(exist_ok=True)
+    (REL / f"{version}.json").write_text(json.dumps({"version": version, "changes": what, **new}, indent=2))
+    write_index()
+    print(f"{version}" + (f" (since {vs[-1]})" if vs else "") + ":\n  " + "\n  ".join(what))
+    git("add", "-A", *[p for p in ("releases", "dvc.lock", "data/metadata", "data/raw", "outputs") if Path(p).exists()])
+    git("commit", "-q", "-m", f"release {version}: {note or ', '.join(what)[:60]}")
+    git("tag", "-a", version, "-m", note or version)
+    print(f"\nsaved as git tag {version}. Upload it:  git push --follow-tags && dvc push")
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("version", help="e.g. v1.0")
-    ap.add_argument("--note", default="")
-    args = ap.parse_args()
-    cfg = load_config()
-    meta, out = Path(cfg["paths"]["metadata"]), Path(cfg["paths"]["outputs"])
-
-    models = {}
-    for m in MODELS:
-        run = read_json(out / "training" / m / "run.json")
-        if not run:
-            continue
-        train = read_json(out / "training" / m / "metrics.json") or {}
-        ev = read_json(out / "evaluation" / m / "metrics.json") or {}
-        models[m] = {
-            "config_file": run.get("config_file", f"configs/{m}.yaml"), "config_hash": run.get("config_hash"),
-            "trained_from_commit": run.get("git_commit"), "started_utc": run.get("started_utc"),
-            "parameters": run["parameters"], "epochs_done": train.get("epochs_done"),
-            "final_train_loss": train.get("final_train_loss"),
-            "test": {k: ev.get(k) for k in ("videos", "frames", "auc_raw", "auc_norm", "auc_macro", "eer",
-                                            "threshold_raw_at_eer", "fps_scored")} if ev else None}
-    card = {
-        "version": args.version, "note": args.note,
-        "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "git_commit": git_commit(),
-        "data": {"dvc": dvc_hashes(), "shanghaitech": read_json(meta / "shanghaitech.json"),
-                 "manual": read_json(meta / "manual.json"),
-                 "split": {k: len(v) for k, v in (read_json(meta / "split.json") or {}).items()}},
-        "models": models,
-        "behavior": {d: read_json(out / "behavior" / d / "metrics.json") for d in ("shanghaitech", "manual")},
-        "comparison": read_json(out / "comparison" / "comparison.json"),
-        "software": software(),
-    }
-    rel = Path("releases")
-    rel.mkdir(exist_ok=True)
-    (rel / f"{args.version}.json").write_text(json.dumps(card, indent=2))
-
-    pct = lambda v: "-" if v is None else f"{v * 100:.1f}%"
-    sh = card["data"]["shanghaitech"] or {}
-    md = [f"# {args.version}" + (f": {args.note}" if args.note else ""), "",
-          f"Created {card['created_utc']} from commit `{card['git_commit']}`.", "", "## Data",
-          f"- ShanghaiTech Campus: {sh.get('videos', '-')} videos, {sh.get('frames', '-')} frames; "
-          f"split {card['data']['split']}",
-          f"- Manual videos: {(card['data']['manual'] or {}).get('videos', '-')}"]
-    md += [f"- `{p}` md5 `{h['md5']}`" for p, h in card["data"]["dvc"].items()]
-    md += ["", "## Models", "| Model | Parameters | AUC micro | AUC norm | AUC macro | EER |", "|---|---|---|---|---|---|"]
-    for m, d in models.items():
-        t = d["test"] or {}
-        p = (d["parameters"] or {}).get("Total")
-        md.append(f"| {m} | {p:,} | {pct(t.get('auc_raw'))} | {pct(t.get('auc_norm'))} | "
-                  f"{pct(t.get('auc_macro'))} | {pct(t.get('eer'))} |" if p else
-                  f"| {m} | - | {pct(t.get('auc_raw'))} | {pct(t.get('auc_norm'))} | {pct(t.get('auc_macro'))} | {pct(t.get('eer'))} |")
-    b = (card["behavior"]["shanghaitech"] or {}).get("frame_level")
-    if b:
-        md += ["", f"Behavior rules (no training): frame AUC {pct(b.get('auc'))}, events "
-               f"{card['behavior']['shanghaitech']['events']}"]
-    (rel / f"{args.version}.md").write_text("\n".join(md) + "\n")
-    missing = [m for m in MODELS if m not in models or not models[m]["test"]]
-    print("\n".join(md))
-    if missing:
-        print(f"\nnote: not trained / evaluated yet: {missing}")
-    print(f"\nnext:\n  git add releases dvc.lock data/metadata outputs && git commit -m \"release {args.version}\"\n"
-          f"  git tag -a {args.version} -m \"{args.note or args.version}\"\n  git push --follow-tags && dvc push")
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--note", default="", help="what this version is, in a few words")
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--diff", nargs=2, metavar=("OLD", "NEW"))
+    a = ap.parse_args()
+    if a.list:
+        write_index()
+        print((REL / "README.md").read_text())
+    elif a.diff:
+        missing = [v for v in a.diff if not (REL / f"{v}.json").exists()]
+        if missing:
+            raise SystemExit(f"no such version: {missing} (see python -m src.release --list)")
+        old, new = (read(REL / f"{v}.json") for v in a.diff)
+        print(f"{a.diff[0]} -> {a.diff[1]}:\n  " + "\n  ".join(changes(old, new) or ["no differences"]))
+    else:
+        release(a.note)
 
 
 if __name__ == "__main__":
