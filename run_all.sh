@@ -44,7 +44,7 @@ fi
 step "3/7 Code of the papers (third_party/, pinned + checksummed)"
 python third_party/fetch.py
 
-step "4/7 Pretrained weights (weights/)"
+step "4/7 Pretrained weights (weights/): download + check each one loads"
 python -m src.models.nets download astt_improved aivad aivad_lite behavior \
     || die "a weight file could not be downloaded: get it with the browser link printed above and save it in weights/"
 

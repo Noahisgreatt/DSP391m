@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib
 import math
 import os
+import re
 import sys
 import types
 from collections import OrderedDict
@@ -425,9 +426,17 @@ class RCNN(nn.Module):
         path = path or download(name)
         if path is None:
             return self
-        sd = safe_load(path)
-        own = self.state_dict()
-        self.load_state_dict({k: v for k, v in sd.items() if k in own})   # Mask R-CNN: mask head unused
+        sd, own = safe_load(path), self.state_dict()
+        # torchvision's 2019 files use older names: fpn.inner_blocks.0.weight -> .0.0.weight,
+        # rpn.head.conv.weight -> .conv.0.0.weight (torchvision renames them the same way when loading)
+        old = lambda k: [k, re.sub(r"\.0\.(weight|bias)$", r".\1", k), re.sub(r"\.0\.0\.(weight|bias)$", r".\1", k)]
+        new = {}
+        for k in own:                                         # the mask head of Mask R-CNN is not used
+            src = next((c for c in old(k) if c in sd), None)
+            if src is None or sd[src].shape != own[k].shape:
+                raise SystemExit(f"{path}: no weights for layer {k}; delete the file and download it again")
+            new[k] = sd[src]
+        self.load_state_dict(new)
         return self
 
     # ---- input: normalise, resize (shorter side min_size), pad to a multiple of 32
@@ -772,19 +781,23 @@ class FlowNetC(nn.Module):
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="download pretrained weights into weights/")
+    ap = argparse.ArgumentParser(description="download pretrained weights into weights/ and check each loads")
     ap.add_argument("cmd", choices=["download"])
     ap.add_argument("names", nargs="+", help=f"any of {list(WEIGHT_SOURCES)}, or: astt_improved aivad aivad_lite behavior")
     a = ap.parse_args()
     groups = {"astt_improved": ["vit_b32_384"], "aivad": ["maskrcnn", "flownet2", "fastpose", "clip_b16"],
               "aivad_lite": ["keypointrcnn", "flownet2"], "behavior": ["keypointrcnn"]}
+    load = {"vit_b32_384": lambda: ViT().load_pretrained(), "maskrcnn": lambda: RCNN(91).load_pretrained("maskrcnn"),
+            "keypointrcnn": lambda: RCNN(2, 17).load_pretrained("keypointrcnn"), "flownet2": lambda: flownet2(),
+            "fastpose": lambda: FastPose().load_pretrained(), "clip_b16": lambda: CLIPVisual().load_pretrained()}
     failed = []
     for w in dict.fromkeys(w for n in a.names for w in groups.get(n, [n])):   # each file once
-        try:
+        try:                                     # download, then load it into its network (a bad file shows up now)
             print("ok", download(w))
-        except RuntimeError as e:
+            load[w]()
+            print(f"   loads into {w}: ok")
+        except (RuntimeError, SystemExit) as e:
             print("FAILED", e)
             failed.append(w)
     if failed:
-        raise SystemExit(f"\nnot downloaded: {', '.join(failed)} (see the browser links above); "
-                         "everything else is ready")
+        raise SystemExit(f"\nproblem with: {', '.join(failed)} (see above); everything else is ready")

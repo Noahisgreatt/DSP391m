@@ -45,7 +45,10 @@ def _frozen(m):
 
 
 @pytest.mark.parametrize("kind", ["keypoint", "box"])
-def test_rcnn_equals_torchvision(kind):
+def test_rcnn_equals_torchvision(kind, tmp_path):
+    """Same output as torchvision with the same weights, loaded from a file that uses the old
+    (2019) layer names, like the real COCO weight files."""
+    import re
     from torchvision.models.detection import keypointrcnn_resnet50_fpn, maskrcnn_resnet50_fpn
     if kind == "keypoint":
         ref = keypointrcnn_resnet50_fpn(weights=None, weights_backbone=None, min_size=320, box_score_thresh=0.0)
@@ -55,7 +58,11 @@ def test_rcnn_equals_torchvision(kind):
         mine = nets.RCNN(91, min_size=320, score_thresh=0.02)
     _frozen(ref)
     ref.eval(); mine.eval()
-    mine.load_state_dict({k: v for k, v in ref.state_dict().items() if k in mine.state_dict()})
+    old = {re.sub(r"rpn\.head\.conv\.0\.0\.", "rpn.head.conv.", re.sub(r"(_blocks\.\d)\.0\.", r"\1.", k)): v
+           for k, v in ref.state_dict().items()}
+    assert "backbone.fpn.inner_blocks.0.weight" in old and "rpn.head.conv.weight" in old
+    torch.save(old, tmp_path / "w.pth")
+    mine.load_pretrained("x", path=tmp_path / "w.pth")
     imgs = [torch.rand(3, 240, 428)]
     with torch.no_grad():
         a, b = ref(imgs)[0], mine(imgs)[0]
