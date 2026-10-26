@@ -37,3 +37,17 @@ def test_tracker_keeps_ids():
         boxes = np.array([[10 + 3 * t, 10, 40 + 3 * t, 80], [200 - 2 * t, 50, 230 - 2 * t, 120]], np.float32)
         seen.append(tuple(tr.update(boxes, np.array([.9, .9]))))
     assert len(set(seen)) == 1 and -1 not in seen[0]
+
+
+def test_cache_kept_until_settings_change(tmp_path):
+    from src.behavior import cache
+    cfg = {"paths": {"features": str(tmp_path)}}
+    d = tmp_path / "tracking" / "x"
+    d.mkdir(parents=True)
+    (d / "v1.npz").write_text("done")                      # made by an older run (no settings file yet)
+    cache(cfg, "tracking", "x", {"a": 1})
+    assert (d / "v1.npz").exists()                           # kept, settings adopted
+    cache(cfg, "tracking", "x", {"a": 1})
+    assert (d / "v1.npz").exists()                           # same settings: kept
+    cache(cfg, "tracking", "x", {"a": 2})
+    assert not (d / "v1.npz").exists()                       # settings changed: recomputed

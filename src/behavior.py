@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -314,7 +315,20 @@ def summarize(tracks, flags, fps):
 
 
 # ====================================================================== the three steps for a dataset
+def cache(cfg, kind, dataset, settings):
+    """Per-video results are kept between runs (a stopped run continues), but thrown away when
+    the settings they were made with change."""
+    folder, settings = features_path(cfg, kind, dataset, "x").parent, json.loads(json.dumps(settings))
+    sig = folder / "settings.json"
+    if sig.exists() and json.loads(sig.read_text()) != settings:
+        print(f"{kind} settings changed: recomputing {folder}")
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    sig.write_text(json.dumps(settings))
+
+
 def track_all(cfg, dataset, vids):
+    cache(cfg, "tracking", dataset, {"tracking": cfg["tracking"], "frame_size": cfg["frame_size"]})
     todo = [(v, d) for v, d in vids if not features_path(cfg, "tracking", dataset, v).exists()]
     tracker, t0 = PeopleTracker(cfg) if todo else None, time.time()
     for k, (v, d) in enumerate(todo, 1):
@@ -325,6 +339,7 @@ def track_all(cfg, dataset, vids):
 
 
 def flow_all(cfg, dataset, vids):
+    cache(cfg, "optical_flow", dataset, {"optical_flow": cfg["optical_flow"], "frame_size": cfg["frame_size"]})
     todo = [(v, d) for v, d in vids if not features_path(cfg, "optical_flow", dataset, v).exists()]
     with ProcessPoolExecutor(max_workers=cfg["run"]["workers"]) as pool:
         jobs = [pool.submit(flow_video, v, d, features_path(cfg, "optical_flow", dataset, v), cfg) for v, d in todo]

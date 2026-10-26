@@ -42,8 +42,8 @@ stages:
       params:
         - configs/behavior.yaml:
       outs:
-        - data/features/tracking/${item}: {cache: false}
-        - data/features/optical_flow/${item}: {cache: false}
+        - data/features/tracking/${item}: {cache: false, persist: true}       # kept: a stopped run continues
+        - data/features/optical_flow/${item}: {cache: false, persist: true}
         - data/features/normal_maps/${item}: {cache: false}
         - outputs/behavior/${item}/events: {cache: false}
       metrics:

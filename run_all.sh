@@ -9,6 +9,7 @@
 # and the data: either access to our DVC remote, or a Kaggle API token (~/.kaggle/kaggle.json).
 set -eo pipefail
 cd "$(dirname "$0")"
+export PYTHONUNBUFFERED=1                         # log lines appear at once, also in run_all.log
 MODE=full; [[ "${1:-}" == "--smoke" ]] && MODE=smoke
 MODELS=(astt_baseline astt_improved aivad aivad_lite)
 step() { printf '\n========== %s\n' "$*"; }
