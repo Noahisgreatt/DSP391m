@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import shutil
 import time
 from collections import defaultdict
@@ -341,7 +342,8 @@ def track_all(cfg, dataset, vids):
 def flow_all(cfg, dataset, vids):
     cache(cfg, "optical_flow", dataset, {"optical_flow": cfg["optical_flow"], "frame_size": cfg["frame_size"]})
     todo = [(v, d) for v, d in vids if not features_path(cfg, "optical_flow", dataset, v).exists()]
-    with ProcessPoolExecutor(max_workers=cfg["run"]["workers"]) as pool:
+    # "spawn" = fresh worker processes: forking a process that already used CUDA (tracking) can hang
+    with ProcessPoolExecutor(max_workers=cfg["run"]["workers"], mp_context=multiprocessing.get_context("spawn")) as pool:
         jobs = [pool.submit(flow_video, v, d, features_path(cfg, "optical_flow", dataset, v), cfg) for v, d in todo]
         for k, j in enumerate(as_completed(jobs), 1):
             print(f"flow [{k}/{len(todo)}] {j.result()}")
