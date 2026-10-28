@@ -68,6 +68,7 @@ blocked. Details and the reason for every change: [docs/models.md](docs/models.m
 
 ```
 run_all.sh           ONE command for everything (above)
+kaggle.sh            train one model on a free Kaggle GPU at the same time (docs/kaggle.md)
 configs/             ALL settings
   data.yaml  behavior.yaml  api.yaml
   astt_baseline.yaml  astt_improved.yaml  aivad.yaml  aivad_lite.yaml     (one per model)

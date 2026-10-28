@@ -4,6 +4,7 @@
     python -m src.data prepare                        # unzip ShanghaiTech + data card   (DVC: prepare_shanghaitech)
     python -m src.data manual                         # cut our phone videos into frames (DVC: prepare_manual)
     python -m src.data split                          # official train / test split      (DVC: split)
+    python -m src.data link DIR [DIR ...]             # use already-unpacked folders instead (Kaggle)
 
 Files:
   data/raw/shanghaitech/{train,test}.zip   Kaggle parts (238 + 199 videos as frames), DVC-tracked
@@ -50,6 +51,25 @@ def download(cfg):
 
 
 # ====================================================================== prepare ShanghaiTech
+def link_shanghaitech(cfg, folders):
+    """Already-unpacked copies (e.g. Kaggle's /kaggle/input/...): link them instead of unzipping."""
+    frames, labels = frames_dir(cfg, "shanghaitech"), labels_dir(cfg)
+    frames.mkdir(parents=True, exist_ok=True); labels.mkdir(parents=True, exist_ok=True)
+    for root in folders:
+        for d, dirs, files in os.walk(root):
+            if "pixel" in d.lower():
+                continue
+            name = Path(d).name
+            if (TRAIN_RE.fullmatch(name) or TEST_RE.fullmatch(name)) and any(Path(f).suffix.lower() in IMAGE_EXTS for f in files):
+                if not (frames / name).exists():
+                    os.symlink(d, frames / name)
+                dirs[:] = []
+            for f in files:
+                if f.endswith(".npy") and not (labels / f).exists():
+                    os.symlink(os.path.join(d, f), labels / f)
+    data_card(cfg, {"linked_from": [str(f) for f in folders]})
+
+
 def prepare_shanghaitech(cfg):
     raw, frames, labels = Path(cfg["paths"]["raw_shanghaitech"]), frames_dir(cfg, "shanghaitech"), labels_dir(cfg)
     labels.mkdir(parents=True, exist_ok=True)
@@ -78,7 +98,12 @@ def prepare_shanghaitech(cfg):
                     print(f"  {zp.name}: {k}/{len(members)} files")
         parts[part] = {"zip_bytes": zp.stat().st_size, "videos": len(vids), "label_files": n_lab}
         print(f"[{part}] {len(vids)} videos, {n_lab} label files")
+    data_card(cfg, parts)
 
+
+def data_card(cfg, parts):
+    """Data card: what the data is, counts, and checks against the official split."""
+    raw, frames, labels = Path(cfg["paths"]["raw_shanghaitech"]), frames_dir(cfg, "shanghaitech"), labels_dir(cfg)
     counts = {d.name: sum(1 for f in d.iterdir() if f.suffix.lower() in IMAGE_EXTS) for d in frames.iterdir() if d.is_dir()}
     train = sorted(v for v in counts if TRAIN_RE.fullmatch(v))
     test = sorted(v for v in counts if TEST_RE.fullmatch(v))
@@ -258,10 +283,14 @@ def video_dataset(cfg, video_dir):
 
 # ====================================================================== command line
 def main():
-    step = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    step.add_argument("step", choices=["download", "prepare", "manual", "split"])
-    step, cfg = step.parse_args().step, load_config()
-    if step == "split":
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("step", choices=["download", "prepare", "manual", "split", "link"])
+    ap.add_argument("folders", nargs="*", help="link: folders that hold the unpacked videos")
+    a = ap.parse_args()
+    step, cfg = a.step, load_config()
+    if step == "link":
+        link_shanghaitech(cfg, a.folders)
+    elif step == "split":
         s = make_split(cfg)
         (Path(cfg["paths"]["metadata"]) / "split.json").write_text(json.dumps(s, indent=1))
         print(f"train {len(s['train'])} videos, test {len(s['test'])} videos")

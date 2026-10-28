@@ -92,7 +92,7 @@ def save(path, obj):
 
 
 def train_astt(cfg, args):
-    from src.models.astt import autocast, build, count_parameters, gradient_loss
+    from src.models.astt import autocast, build, count_parameters, gradient_loss, half_dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     t, train_vids = cfg["train"], load_split(cfg)["train"]
     if args.smoke:
@@ -115,10 +115,14 @@ def train_astt(cfg, args):
     total = per_epoch * t["epochs"] if t["train_steps"] in ("auto", None) else int(t["train_steps"])
     print(f"train: {len(train_vids)} videos, {len(ds):,} windows, {per_epoch:,} batches/epoch, {total:,} steps")
     opt, sch = optimizer_and_schedule(cfg, model, total)
+    fp16 = device.type == "cuda" and t.get("amp", False) and half_dtype(device) == torch.float16
+    scaler = torch.amp.GradScaler("cuda", enabled=fp16)       # fp16 needs loss scaling; bf16 / fp32 don't
     epoch, done = 1, 0                                         # where to start (batches done in that epoch)
     if ckpt.exists():                                          # same command again = continue
         ck = torch.load(ckpt, map_location=device)
         model.load_state_dict(ck["state_dict"]); opt.load_state_dict(ck["optimizer"]); sch.load_state_dict(ck["lr_scheduler"])
+        if ck.get("scaler"):                                    # empty when saved by a bf16 / fp32 run
+            scaler.load_state_dict(ck["scaler"])
         epoch, done = ck["epoch"], ck["done"]
         print(f"continuing: epoch {epoch}, batch {done}")
     else:
@@ -130,7 +134,7 @@ def train_astt(cfg, args):
 
     monitor = Monitor(cfg["model"]["name"], 0 if args.smoke else cfg["monitoring"]["training_metrics_port"])
     checkpoint = lambda e, d: save(ckpt, {"epoch": e, "done": d, "state_dict": model.state_dict(), "optimizer": opt.state_dict(),
-                                          "lr_scheduler": sch.state_dict()})
+                                          "lr_scheduler": sch.state_dict(), "scaler": scaler.state_dict()})
     t0 = last_save = time.time()
     while epoch <= t["epochs"]:
         model.train()
@@ -143,10 +147,11 @@ def train_astt(cfg, args):
             loss = nn.functional.mse_loss(pred, target)
             if t["loss"] == "mse+gradient":
                 loss = loss + t["gradient_loss_weight"] * gradient_loss(pred, target)
-            loss.backward()
+            scaler.scale(loss).backward()
             if t.get("grad_clip"):
+                scaler.unscale_(opt)
                 nn.utils.clip_grad_norm_(model.parameters(), t["grad_clip"])
-            opt.step(); sch.step()
+            scaler.step(opt); scaler.update(); sch.step()
             losses.append(loss.item())
             if k % 100 == 0 or k == per_epoch - 1:
                 speed, lr, step = (len(losses)) / (time.time() - te), opt.param_groups[-1]["lr"], (epoch - 1) * per_epoch + k + 1
@@ -159,6 +164,9 @@ def train_astt(cfg, args):
             if time.time() - last_save > 60 * t["checkpoint_minutes"]:
                 checkpoint(epoch, k + 1)
                 last_save = time.time()
+            if args.max_hours and time.time() - t0 > 3600 * args.max_hours:   # e.g. Kaggle's 12-hour limit
+                checkpoint(epoch, k + 1)
+                return print(f"stopped after {args.max_hours} h at epoch {epoch}, batch {k + 1}: run again to continue")
         save(out / "model.pth", {"epoch": epoch, "state_dict": model.state_dict()})   # model.pth = last epoch
         epoch, done = epoch + 1, 0
         checkpoint(epoch, 0)
@@ -173,6 +181,7 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--smoke", action="store_true", help="tiny run to test the setup")
     ap.add_argument("--fresh", action="store_true", help="delete the old output and start over")
+    ap.add_argument("--max-hours", type=float, help="save and stop after this many hours (continue later)")
     args = ap.parse_args()
     cfg = load_config(args.config, "configs/api.yaml")
     if cfg["model"].get("family") == "aivad":                 # models 3 / 4: no gradient training

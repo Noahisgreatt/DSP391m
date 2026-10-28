@@ -134,9 +134,14 @@ def load_trained(cfg, checkpoint, device):
 
 
 # ---------------------------------------------------------------- scoring
+def half_dtype(device):
+    """bf16 on GPUs that have it (RTX 30xx / 40xx, A100 ...), else fp16 (Kaggle's T4 / P100)."""
+    return torch.bfloat16 if torch.cuda.get_device_capability(device)[0] >= 8 else torch.float16
+
+
 def autocast(cfg, device):
     if device.type == "cuda" and cfg["train"].get("amp", False):
-        return torch.autocast("cuda", dtype=torch.bfloat16)
+        return torch.autocast("cuda", dtype=half_dtype(device))
     return torch.autocast(device.type, enabled=False)
 
 
