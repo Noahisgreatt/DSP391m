@@ -19,6 +19,19 @@ finished steps are skipped and training continues from its last checkpoint (save
 To keep it running after you close the terminal:
 `nohup bash run_all.sh > run_all.log 2>&1 &` and watch it with `tail -f run_all.log`.
 
+### Splitting the work over several computers
+Each computer runs only its models, then sends its results (including the extracted attributes,
+so nothing is computed twice) to the main computer:
+```bash
+bash run_all.sh aivad_lite                              # e.g. a friend: model 4 only
+tar czf aivad_lite_results.tgz outputs/training/aivad_lite outputs/evaluation/aivad_lite data/features/aivad_lite
+```
+On the main computer (where the versions are made and pushed):
+```bash
+tar xzf aivad_lite_results.tgz && bash run_all.sh aivad_lite   # minutes: reuses the results, makes a version
+```
+Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](docs/kaggle.md)), `aivad` (3), `aivad_lite` (4).
+
 ### What you need
 | | |
 |---|---|

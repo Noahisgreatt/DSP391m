@@ -171,7 +171,8 @@ def train_astt(cfg, args):
         epoch, done = epoch + 1, 0
         checkpoint(epoch, 0)
         print(f"epoch {epoch - 1} done, loss {np.mean(losses):.4f}")
-        (out / "metrics.json").write_text(json.dumps({"epochs_done": epoch - 1, "final_train_loss": float(np.mean(losses)),
+        (out / "metrics.json").write_text(json.dumps({"epochs_done": epoch - 1, "finished": epoch > t["epochs"],
+                                                      "final_train_loss": float(np.mean(losses)),
                                                       "parameters_total": params["Total"]}, indent=2))
     print(f"done: {out}/model.pth")
 
@@ -186,7 +187,7 @@ def main():
     cfg = load_config(args.config, "configs/api.yaml")
     if cfg["model"].get("family") == "aivad":                 # models 3 / 4: no gradient training
         from src.models.aivad import fit
-        return fit(cfg, args.smoke, args.fresh)
+        return fit(cfg, args.smoke, args.fresh, args.max_hours)
     train_astt(cfg, args)
 
 

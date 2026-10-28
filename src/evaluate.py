@@ -89,7 +89,7 @@ def binary_metrics(y, flags):
 
 
 # ====================================================================== one model
-def evaluate(config, smoke=False, limit=None):
+def evaluate(config, smoke=False, limit=None, max_hours=None):
     from src.data import load_split, video_labels
     from src.models import scorer as make_scorer
     cfg = load_config(config)
@@ -100,6 +100,8 @@ def evaluate(config, smoke=False, limit=None):
     print(f"{cfg['model']['name']}: {len(vids)} test videos on {device}")
     t0, scores = time.time(), {}
     for k, v in enumerate(vids, 1):
+        if max_hours and time.time() - t0 > 3600 * max_hours:     # models 3/4 cache each video: run again
+            return print(f"stopped after {max_hours} h at video {k}/{len(vids)}: run again to continue")
         scores[v] = scorer(frames_dir(cfg, "shanghaitech") / v, v)
         if k % 10 == 0 or k == len(vids):
             print(f"  [{k}/{len(vids)}] {time.time() - t0:.0f}s")
@@ -245,6 +247,7 @@ def main():
     ap.add_argument("--config")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--max-hours", type=float, help="stop after this many hours (Kaggle)")
     ap.add_argument("--compare", action="store_true")
     ap.add_argument("--benchmark", action="store_true")
     ap.add_argument("--models", nargs="*", default=list(MODELS))
@@ -255,7 +258,7 @@ def main():
     elif a.benchmark:
         benchmark(a.models, a.frames)
     elif a.config:
-        evaluate(a.config, a.smoke, a.limit)
+        evaluate(a.config, a.smoke, a.limit, a.max_hours)
     else:
         ap.error("give --config, --compare or --benchmark")
 

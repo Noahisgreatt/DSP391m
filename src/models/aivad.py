@@ -394,7 +394,7 @@ def count_parameters(ex) -> dict:
     return out
 
 
-def fit(cfg, smoke=False, fresh=False):
+def fit(cfg, smoke=False, fresh=False, max_hours=None):
     """Attributes of the normal training videos -> density estimators -> outputs/training/<model>/."""
     from src.data import load_split
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -409,6 +409,8 @@ def fit(cfg, smoke=False, fresh=False):
     print(f"{cfg['model']['name']}: {params['Total']:,} parameters in its networks, on {device}")
     feats, log = {}, ["step,video,frames,objects,fps,minutes"]
     for k, v in enumerate(vids, 1):                         # cached per video: a stopped run continues
+        if max_hours and time.time() - t0 > 3600 * max_hours:
+            return print(f"stopped after {max_hours} h at video {k}/{len(vids)}: run again to continue")
         f = feats[v] = ex.video(frames_dir(cfg, "shanghaitech") / v, cache_dir(cfg, "train", smoke) / f"{v}.npz",
                                 30 if smoke else None)
         fps = float(f["n_frames"]) / max(float(f["seconds"]), 1e-9)
@@ -425,7 +427,7 @@ def fit(cfg, smoke=False, fresh=False):
         "device": str(device), "parameters": params, "train_videos": len(vids), "config": cfg},
         indent=2, default=str))
     (out / "metrics.json").write_text(json.dumps({
-        "train_videos": len(feats), "train_frames": int(sum(int(f["n_frames"]) for f in feats.values())),
+        "finished": True, "train_videos": len(feats), "train_frames": int(sum(int(f["n_frames"]) for f in feats.values())),
         "train_objects": int(sum(len(f["frame"]) for f in feats.values())),
         "train_poses": int(sum(len(f["pose"]) for f in feats.values())), "calibration": calib,
         "minutes": round((time.time() - t0) / 60, 1), "parameters_total": params.get("Total")}, indent=2))
