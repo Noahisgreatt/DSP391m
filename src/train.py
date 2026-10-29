@@ -91,6 +91,15 @@ def save(path, obj):
     tmp.replace(path)                                         # never a half-written file
 
 
+RUN_LENGTH = ("epochs", "train_steps", "num_workers", "checkpoint_minutes")   # may change mid-run
+
+
+def settings_hash(cfg):
+    """Fingerprint of everything that defines the model and HOW it learns (not how long / how fast)."""
+    return config_hash({k: {a: b for a, b in cfg[k].items() if k != "train" or a not in RUN_LENGTH}
+                        for k in ("model", "input", "train")})
+
+
 def train_astt(cfg, args):
     from src.models.astt import autocast, build, count_parameters, gradient_loss, half_dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,11 +108,11 @@ def train_astt(cfg, args):
         train_vids = train_vids[:2]
         t.update(epochs=1, batch_size=2, warmup_steps=2)
     out = out_dir(cfg, "training", args.smoke)
-    ckpt, chash = out / "checkpoint.pth", config_hash({k: cfg[k] for k in ("model", "input", "train")})
+    ckpt, chash = out / "checkpoint.pth", settings_hash(cfg)
     if args.fresh and out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
-    if ckpt.exists() and json.loads((out / "run.json").read_text())["config_hash"] != chash:
+    if ckpt.exists() and settings_hash(json.loads((out / "run.json").read_text())["config"]) != chash:
         raise SystemExit(f"{out} holds a run with DIFFERENT settings. Add --fresh to start over.")
 
     model = build(cfg).to(device)
@@ -120,7 +129,14 @@ def train_astt(cfg, args):
     epoch, done = 1, 0                                         # where to start (batches done in that epoch)
     if ckpt.exists():                                          # same command again = continue
         ck = torch.load(ckpt, map_location=device)
-        model.load_state_dict(ck["state_dict"]); opt.load_state_dict(ck["optimizer"]); sch.load_state_dict(ck["lr_scheduler"])
+        model.load_state_dict(ck["state_dict"]); opt.load_state_dict(ck["optimizer"])
+        sd = ck["lr_scheduler"]
+        if sd.get("total_steps", total) == total:
+            sch.load_state_dict(sd)
+        else:                                                  # epochs changed (e.g. 5 -> 2): the same schedule,
+            sch.last_epoch = sd["last_epoch"] - 1              # stretched over the new length, from where we are
+            sch.step()
+            print(f"learning-rate schedule adapted to {t['epochs']} epochs ({total:,} steps)")
         if ck.get("scaler"):                                    # empty when saved by a bf16 / fp32 run
             scaler.load_state_dict(ck["scaler"])
         epoch, done = ck["epoch"], ck["done"]

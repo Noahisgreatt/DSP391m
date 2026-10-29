@@ -24,7 +24,7 @@ input:
   frame_order: newest_first   #   frames concatenated newest-first
 
 train:
-  epochs: 5                   # --epochs 5
+  epochs: 2                   # [CHANGE] thesis: --epochs 5; 2 because of our time limit
   batch_size: 8               # --batch-size 8 (out of GPU memory? 4 keeps the model the same)
   optimizer: sgd              # SGD, momentum 0.9
   lr: 1.0e-4                  # --lr 1e-4
