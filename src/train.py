@@ -136,6 +136,7 @@ def train_astt(cfg, args):
     checkpoint = lambda e, d: save(ckpt, {"epoch": e, "done": d, "state_dict": model.state_dict(), "optimizer": opt.state_dict(),
                                           "lr_scheduler": sch.state_dict(), "scaler": scaler.state_dict()})
     t0 = last_save = time.time()
+    bad = 0                                                    # batches in a row whose loss is not a number
     while epoch <= t["epochs"]:
         model.train()
         losses, te = [], time.time()
@@ -147,6 +148,14 @@ def train_astt(cfg, args):
             loss = nn.functional.mse_loss(pred, target)
             if t["loss"] == "mse+gradient":
                 loss = loss + t["gradient_loss_weight"] * gradient_loss(pred, target)
+            if not torch.isfinite(loss):                       # skip it instead of learning from it
+                bad += 1
+                sch.step()
+                if bad >= 100:
+                    raise SystemExit("the loss was not a number (nan/inf) for 100 batches in a row: training diverged. "
+                                     "Start this model again with --fresh")
+                continue
+            bad = 0
             scaler.scale(loss).backward()
             if t.get("grad_clip"):
                 scaler.unscale_(opt)

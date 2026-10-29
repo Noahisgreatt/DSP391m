@@ -89,9 +89,10 @@ class ASTTImproved(nn.Module):
         tok = self.spatial_transformer.forward_features(x.flatten(0, 1))     # (b*t, 1+g*g, d)
         n, d = tok.shape[1:]
         seq = tok.view(b, t, n, d).permute(0, 2, 1, 3).reshape(b * n, t, d)
-        seq = torch.cat([self.cls_token.expand(b * n, -1, -1), seq], 1)
-        tok = self.temporal_transformer(seq)[:, 0].view(b, n, d)
-        tok = tok + self.cross_att(tok)
+        with torch.autocast(x.device.type, enabled=False):  # fp32: the repo's attention computes q @ k before
+            seq = torch.cat([self.cls_token.expand(b * n, -1, -1), seq.float()], 1)    # scaling, which overflows fp16
+            tok = self.temporal_transformer(seq)[:, 0].view(b, n, d)
+            tok = tok + self.cross_att(tok)
         fmap = tok[:, 1:].transpose(1, 2).reshape(b, d, self.grid, self.grid)
         out = self.decoder(self.to_map(F.interpolate(fmap, size=(16, 16), mode="bilinear", align_corners=False)))
         if self.residual:
