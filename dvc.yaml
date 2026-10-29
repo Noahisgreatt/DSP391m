@@ -55,8 +55,8 @@ stages:
     foreach:
       astt_baseline: {code: src/models/astt.py}
       astt_improved: {code: src/models/astt.py}
-      aivad: {code: src/models/aivad.py}
-      aivad_lite: {code: src/models/aivad.py}
+      mulde: {code: src/models/mulde.py}
+      mulde_improved: {code: src/models/mulde.py}
     do:
       cmd: python -m src.train --config configs/${key}.yaml
       deps: [data/metadata/shanghaitech.json, data/metadata/split.json, "${item.code}", src/models/nets.py, src/train.py]
@@ -73,8 +73,8 @@ stages:
     foreach:
       astt_baseline: {code: src/models/astt.py}
       astt_improved: {code: src/models/astt.py}
-      aivad: {code: src/models/aivad.py}
-      aivad_lite: {code: src/models/aivad.py}
+      mulde: {code: src/models/mulde.py}
+      mulde_improved: {code: src/models/mulde.py}
     do:
       cmd: python -m src.evaluate --config configs/${key}.yaml
       deps: ["outputs/training/${key}/model.pth", data/metadata/split.json, "${item.code}", src/evaluate.py]
@@ -90,8 +90,8 @@ stages:
     deps:
       - outputs/evaluation/astt_baseline/metrics.json
       - outputs/evaluation/astt_improved/metrics.json
-      - outputs/evaluation/aivad/metrics.json
-      - outputs/evaluation/aivad_lite/metrics.json
+      - outputs/evaluation/mulde/metrics.json
+      - outputs/evaluation/mulde_improved/metrics.json
       - outputs/behavior/shanghaitech/metrics.json
       - src/evaluate.py
     outs:
@@ -105,8 +105,8 @@ stages:
     deps:
       - outputs/training/astt_baseline/model.pth
       - outputs/training/astt_improved/model.pth
-      - outputs/training/aivad/model.pth
-      - outputs/training/aivad_lite/model.pth
+      - outputs/training/mulde/model.pth
+      - outputs/training/mulde_improved/model.pth
       - src/evaluate.py
     outs:
       - outputs/comparison/benchmark.md: {cache: false}
@@ -119,8 +119,8 @@ plots:                                     # dvc plots show / dvc plots diff v1.
       y:
         outputs/evaluation/astt_baseline/roc.csv: tpr
         outputs/evaluation/astt_improved/roc.csv: tpr
-        outputs/evaluation/aivad/roc.csv: tpr
-        outputs/evaluation/aivad_lite/roc.csv: tpr
+        outputs/evaluation/mulde/roc.csv: tpr
+        outputs/evaluation/mulde_improved/roc.csv: tpr
 
 artifacts:                                 # model registry: what each trained model is
   astt-baseline:
@@ -133,13 +133,13 @@ artifacts:                                 # model registry: what each trained m
     type: model
     desc: "Model 2: improved ASTT (pretrained ViT, spatial tokens, residual prediction), 100.4M"
     labels: [video-anomaly-detection, shanghaitech, transfer-learning]
-  aivad:
-    path: outputs/training/aivad/model.pth
+  mulde:
+    path: outputs/training/mulde/model.pth
     type: model
-    desc: "Model 3: AI-VAD density model (networks: Faster R-CNN + FlowNet2 + FastPose + CLIP, 331.0M)"
-    labels: [video-anomaly-detection, shanghaitech, interpretable, baseline]
-  aivad-lite:
-    path: outputs/training/aivad_lite/model.pth
+    desc: "Model 3: MULDE (CVPR 2024) density model on Hiera-B video features, 70.7M"
+    labels: [video-anomaly-detection, shanghaitech, density-estimation, baseline]
+  mulde-improved:
+    path: outputs/training/mulde_improved/model.pth
     type: model
-    desc: "Model 4: AI-VAD Lite density model (networks: Keypoint R-CNN + FlowNetC, 98.3M)"
-    labels: [video-anomaly-detection, shanghaitech, interpretable, lightweight]
+    desc: "Model 4: MULDE improved (two clip lengths, per-camera mixtures, lighter density network), 58.1M"
+    labels: [video-anomaly-detection, shanghaitech, density-estimation, lightweight]

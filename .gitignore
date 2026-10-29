@@ -28,8 +28,6 @@ outputs/demo/
 #      (python third_party/fetch.py; not republished, see third_party/README.md)
 weights/
 third_party/ASTT/
-third_party/AIVAD/
-third_party/AlphaPose/
 
 # ---- made by run_all.sh when conda is missing
 .venv/

@@ -25,8 +25,8 @@ The plan for this project:
 |---|---|---|
 | **v1.0** | data (ShanghaiTech official split + phone videos) + behavior rules + **model 1** (thesis ASTT) | how good is the thesis model on our data? |
 | **v2.0** | + **model 2** (improved ASTT) | does our ASTT upgrade beat the thesis model? |
-| **v3.0** | + **model 3** (AI-VAD) | how does a strong published method do? |
-| **v4.0** | + **model 4** (AI-VAD Lite) + comparison + benchmark | can AI-VAD be much lighter without losing accuracy? |
+| **v3.0** | + **model 3** (MULDE, CVPR 2024) | how does a recent published method do? |
+| **v4.0** | + **model 4** (MULDE improved) + comparison + benchmark | can MULDE be lighter and more accurate? |
 | v4.1, v4.2 ... | any change after that (tuning, more data, bug fixes) | did the change help? |
 | v5.0 | TensorRT versions of models 2 and 4 | how much faster in deployment? |
 

@@ -2,8 +2,8 @@
 
     python -m src.train --config configs/astt_baseline.yaml           # model 1
     python -m src.train --config configs/astt_improved.yaml           # model 2
-    python -m src.train --config configs/aivad.yaml                   # model 3 (attributes + density fit)
-    python -m src.train --config configs/aivad_lite.yaml              # model 4
+    python -m src.train --config configs/mulde.yaml                   # model 3 (features + density fit)
+    python -m src.train --config configs/mulde_improved.yaml          # model 4
     add --smoke for a 2-minute test run, --fresh to throw away an old run and start over
 
 Stopped (shutdown, crash, Ctrl+C)? Run the SAME command again: it continues from the last
@@ -101,7 +101,8 @@ def settings_hash(cfg):
 
 
 def train_astt(cfg, args):
-    from src.models.astt import autocast, build, count_parameters, gradient_loss, half_dtype
+    from src.models.astt import autocast, build, count_parameters, gradient_loss
+    from src.models.nets import half_dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     t, train_vids = cfg["train"], load_split(cfg)["train"]
     if args.smoke:
@@ -210,8 +211,8 @@ def main():
     ap.add_argument("--max-hours", type=float, help="save and stop after this many hours (continue later)")
     args = ap.parse_args()
     cfg = load_config(args.config, "configs/api.yaml")
-    if cfg["model"].get("family") == "aivad":                 # models 3 / 4: no gradient training
-        from src.models.aivad import fit
+    if cfg["model"].get("family") == "mulde":                 # models 3 / 4: features + density network
+        from src.models.mulde import fit
         return fit(cfg, args.smoke, args.fresh, args.max_hours)
     train_astt(cfg, args)
 

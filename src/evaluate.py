@@ -5,13 +5,13 @@
     python -m src.evaluate --benchmark                             # size and speed of every model
     (--smoke after a smoke training run, --limit N for only N test videos)
 
-Score per frame: models 1-2 = prediction error (MSE); models 3-4 = AI-VAD's calibrated score.
+Score per frame: models 1-2 = prediction error (MSE); models 3-4 = MULDE's negative log-likelihood.
 Higher = more abnormal for all.
-  auc_raw    AUC of all test frames pooled ("micro"; what the thesis repo prints, AI-VAD's 85.9%)
+  auc_raw    AUC of all test frames pooled ("micro"; what the thesis repo and MULDE report)
   auc_norm   AUC after normalising the score inside each video (videos differ in brightness and
              crowd size, so raw scores of different videos aren't comparable). This is why the
              old ASTT run gave 0.518 raw but 0.616 normalised with the SAME model.
-  auc_macro  mean of the per-video AUCs (AI-VAD's "macro", 89.6%)
+  auc_macro  mean of the per-video AUCs ("macro", the second number MULDE reports)
   eer        equal error rate (lower is better); threshold_raw_at_eer is used by the demo / API
 Out: outputs/evaluation/<model>/metrics.json, roc.csv, scores/<video>.npz
      outputs/comparison/comparison.md|json, roc.png, benchmark.md|json
@@ -31,7 +31,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from src.utils import frames_dir, load_config, out_dir
 
 MODELS = {"astt_baseline": "Model 1: ASTT (thesis, unchanged)", "astt_improved": "Model 2: ASTT improved (ours)",
-          "aivad": "Model 3: AI-VAD (Reiss & Hoshen)", "aivad_lite": "Model 4: AI-VAD Lite (ours)"}
+          "mulde": "Model 3: MULDE (Micorek et al.)", "mulde_improved": "Model 4: MULDE improved (ours)"}
 
 
 # ====================================================================== metrics
@@ -52,7 +52,8 @@ def eer_point(y, s):
 
 
 def macro_auc(per_video):
-    """AI-VAD's macro AUC: per-video AUC with one dummy normal (0) and abnormal (max) frame."""
+    """Macro AUC as in Georgescu et al. 2021 (used by MULDE): per-video AUC with one dummy normal (0)
+    and one dummy abnormal (max) frame, so videos with a single class still count."""
     return float(np.mean([roc_auc_score(np.concatenate(([0], y, [1])), np.concatenate(([0], s, [np.finfo(np.float64).max])))
                           for s, y in per_video]))
 
@@ -197,20 +198,17 @@ def benchmark(models, n_frames):
             continue
         if device.type == "cuda":
             torch.cuda.empty_cache(); torch.cuda.reset_peak_memory_stats()
-        if cfg["model"].get("family") == "aivad":
-            from src.models.aivad import Extractor, Scorer, count_parameters
-            ex = Extractor(cfg, device)
-            sc = Scorer(cfg, ckpt, device, extractor=ex)
-            ex.video(vdir, None, 5)                                   # warm-up
-            ex.timing, t0 = {}, time.time()
-            feat = ex.video(vdir, None, n_frames)
-            t1 = time.time()
-            sc.density.score(vid, feat)
-            n = int(feat["n_frames"])
-            ms = {k: round(v / n * 1000, 2) for k, v in ex.timing.items()}
-            ms["attributes"] = round(((t1 - t0) - sum(ex.timing.values())) / n * 1000, 2)
-            ms["density"] = round((time.time() - t1) / n * 1000, 2)
-            params = count_parameters(ex)
+        if cfg["model"].get("family") == "mulde":
+            from src.models.mulde import Features, Scorer, levels, parameters
+            sc = Scorer(cfg, ckpt, device)
+            sc.features = Features(cfg, device)
+            sc.features.video(vdir, vid, None, 1, 20)                    # warm-up
+            sync(); t0 = time.time()
+            _, X = sc.features.video(vdir, vid, None, 1, n_frames)
+            sync(); t1 = time.time()
+            sc.gmms["all"].score_samples(levels(sc.net, ((X - sc.mean) / sc.std).astype(np.float32), sc.sigmas, device))
+            ms = {"features": round((t1 - t0) / len(X) * 1000, 2), "density": round((time.time() - t1) / len(X) * 1000, 2)}
+            params = parameters(cfg)
         else:
             from src.data import video_dataset
             from src.models.astt import autocast, count_parameters, load_trained

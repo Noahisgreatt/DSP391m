@@ -1,6 +1,6 @@
 # DSP391m, Python 3.10, conda env dsp391m:   pip install -r requirements.txt
 # Every network is our own PyTorch code (src/models/nets.py); torchvision is used only for two
-# operators (non-maximum suppression, RoI-align). No timm / ultralytics / CLIP / detectron2.
+# operators (non-maximum suppression, RoI-align). No timm / ultralytics / CLIP / detectron2 / hiera package.
 torch>=2.2
 torchvision>=0.17
 numpy>=1.24
@@ -10,7 +10,6 @@ scikit-learn>=1.3
 pyyaml>=6.0
 matplotlib>=3.8
 safetensors>=0.4     # reads the ImageNet ViT weights file
-gdown>=5.1           # downloads weight files from Google Drive
 # MLOps
 dvc>=3.50
 dvc-gdrive>=3.0

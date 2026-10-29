@@ -701,47 +701,6 @@
         "overrides": []
       },
       "options": {}
-    },
-    {
-      "id": 23,
-      "type": "bargauge",
-      "title": "Unusual objects, models 3/4 (last hour)",
-      "description": "Which AI-VAD attribute made objects unusual: motion, pose, motion vs. crowd",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 18,
-        "y": 13
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (attribute) (increase(vad_unusual_objects_total[1h]))",
-          "legendFormat": "{{attribute}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
     }
   ],
   "editable": true

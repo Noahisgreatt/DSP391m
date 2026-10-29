@@ -20,8 +20,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SOURCES = {
     "ASTT": ("https://github.com/Tungufm/ASTT", "1d05305a94fb47b33897c7aa085c5351bcbbc8f9"),
-    "AIVAD": ("https://github.com/talreiss/Accurate-Interpretable-VAD", "88ebc02601dde2178a2bd62b82956ceefde6b78d"),
-    "AlphaPose": ("https://github.com/MVIG-SJTU/AlphaPose", "c60106d19afb443e964df6f06ed1842962f5f1f7"),
 }
 
 

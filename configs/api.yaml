@@ -1,6 +1,6 @@
 # FastAPI service (api/) + monitoring.
 api:
-  model: astt_improved              # astt_baseline | astt_improved | aivad | aivad_lite | none (rules only)
+  model: astt_improved              # astt_baseline | astt_improved | mulde | mulde_improved | none (rules only)
   checkpoint: null                  # null = outputs/training/<model>/model.pth
   threshold: null                   # null = EER threshold from outputs/evaluation/<model>/metrics.json
   device: null                      # null = GPU if available

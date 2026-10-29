@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 
-MODELS = ("astt_baseline", "astt_improved", "aivad", "aivad_lite")
+MODELS = ("astt_baseline", "astt_improved", "mulde", "mulde_improved")
 REL = Path("releases")
 METRICS = ("auc_raw", "auc_norm", "auc_macro", "eer", "fps_scored")
 

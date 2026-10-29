@@ -2,7 +2,6 @@
 import pytest
 import torch
 
-from src.models import nets
 from src.models.astt import build, count_parameters
 from src.utils import load_config
 
@@ -22,9 +21,8 @@ def test_forward_shape(name):
     assert y.shape == (1, 3, 256, 256) and y.abs().max() <= 1 + 1e-5
 
 
-def test_aivad_models_size():
-    model3 = nets.n_params(nets.RCNN(91)) + nets.n_params(nets.flownet2(False)) + nets.n_params(nets.FastPose()) \
-        + nets.n_params(nets.CLIPVisual())
-    model4 = nets.n_params(nets.RCNN(2, 17)) + nets.n_params(nets.FlowNetC(False))
-    assert model3 == 331_044_505 and model4 == 98_312_556
-    assert model4 >= 35_000_000 and model4 < model3 / 3
+def test_mulde_models_size():
+    from src.models.mulde import parameters
+    m3, m4 = (parameters(load_config(f"configs/{n}.yaml"))["Total"] for n in ("mulde", "mulde_improved"))
+    assert m3 == 70_724_289 and m4 == 58_133_185                    # Hiera-B 50,784,960 + density network
+    assert 35_000_000 <= m4 < m3

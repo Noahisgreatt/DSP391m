@@ -1,29 +1,21 @@
 """Every neural network the project uses, written here in plain PyTorch.
 
 No model is created through a library ("wrapper") call such as timm.create_model, YOLO(...),
-clip.load, detectron2 or torchvision.models.*. Each network below is our own nn.Module whose
-layer names follow the published checkpoint, so pretrained weights load directly (transfer
-learning). tests/test_nets.py checks each one gives the same output as the reference
-implementation when both have the same weights.
+torch.hub.load or torchvision.models.*. Each network below is our own nn.Module whose layer names
+follow the published checkpoint, so pretrained weights load directly (transfer learning).
+tests/test_nets.py checks each one gives the same output as the official implementation when both
+have the same weights.
 
-  ViT          ViT-B/32-384 image encoder          models 1 (random init) and 2 (ImageNet weights)
-  CLIPVisual   CLIP ViT-B/16 image encoder         model 3 (appearance)
-  RCNN         ResNet-50-FPN Faster R-CNN detector  model 3 (all COCO objects)
-               + keypoint head (Keypoint R-CNN)    model 4 + behavior (people + 17 body keypoints)
-  FastPose     AlphaPose ResNet-50 pose network    model 3 (layers from third_party/AlphaPose)
-  FlowNet2 / FlowNetC  optical flow                models 3 / 4 (code from third_party/AIVAD;
-               its 3 CUDA-only layers are re-written below in plain PyTorch)
+  ViT     ViT-B/32-384 image encoder              models 1 (random init) and 2 (ImageNet weights)
+  Hiera   Hiera-B video transformer (Kinetics-400) models 3 and 4 (MULDE features)
+  RCNN    ResNet-50-FPN Keypoint R-CNN            behavior rules (people + 17 body keypoints)
 Weights: python -m src.models.nets download <name> ...   (files go to weights/)
 """
 from __future__ import annotations
 
-import importlib
 import math
 import os
 import re
-import sys
-import types
-from collections import OrderedDict
 from pathlib import Path
 
 import cv2
@@ -35,20 +27,12 @@ from torchvision.ops import batched_nms, roi_align
 
 ROOT = Path(__file__).resolve().parents[2]
 WEIGHTS = ROOT / "weights"
-WEIGHT_SOURCES = {   # name: (file, url or google-drive id)
+WEIGHT_SOURCES = {   # name: (file, url)
     "vit_b32_384": ("vit_base_patch32_384.augreg_in21k_ft_in1k.safetensors",
                     "https://huggingface.co/timm/vit_base_patch32_384.augreg_in21k_ft_in1k/resolve/main/model.safetensors"),
-    "maskrcnn": ("maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth",
-                 "https://download.pytorch.org/models/maskrcnn_resnet50_fpn_coco-bf2d0c1e.pth"),
+    "hiera_b16": ("hiera_base_16x224.pth", "https://dl.fbaipublicfiles.com/hiera/hiera_base_16x224.pth"),   # K400
     "keypointrcnn": ("keypointrcnn_resnet50_fpn_coco-fc266e95.pth",
                      "https://download.pytorch.org/models/keypointrcnn_resnet50_fpn_coco-fc266e95.pth"),
-    "clip_b16": ("CLIP-ViT-B-16.pt", "https://openaipublic.azureedge.net/clip/models/"
-                 "5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f/ViT-B-16.pt"),
-    # NVIDIA's original Google Drive link (1hF8vS6YeHkx3j2pfCeQqqZGwA_PJq_Da) is closed (403); same file
-    # mirrored by EvalCrafter (CVPR 2024). Loaded weights-only and checked layer by layer (flownet2()).
-    "flownet2": ("FlowNet2_checkpoint.pth.tar",
-                 "https://huggingface.co/RaphaelLiu/EvalCrafter-Models/resolve/main/FlowNet2_checkpoint.pth.tar"),
-    "fastpose": ("fast_res50_256x192.pth", "gdrive:1kQhnMRURFiy7NsdS8EFL-8vtqEXOgECn"),
 }
 
 
@@ -70,18 +54,11 @@ def download(name: str) -> Path | None:
     print(f"downloading {name} -> {path}")
     part = path.with_name(path.name + ".part")              # never a half-downloaded weight file
     try:
-        if src.startswith("gdrive:"):
-            import gdown
-            if gdown.download(id=src[7:], output=str(part), quiet=False) is None:
-                raise RuntimeError("Google Drive refused the download")
-        else:
-            torch.hub.download_url_to_file(src, str(part))
+        torch.hub.download_url_to_file(src, str(part))
     except Exception as e:
         part.unlink(missing_ok=True)
-        link = f"https://drive.google.com/uc?id={src[7:]}" if src.startswith("gdrive:") else src
         raise RuntimeError(f"could not download {name} ({type(e).__name__}).\n"
-                           f"  Download it in your browser: {link}\n"
-                           f"  and save it as: {path}") from None
+                           f"  Download it in your browser: {src}\n  and save it as: {path}") from None
     part.replace(path)
     return path
 
@@ -101,6 +78,16 @@ def safe_load(path):
             return torch.load(str(path), map_location="cpu", weights_only=True)
         except Exception as e:
             raise SystemExit(f"{path} contains more than weights, refusing to load it ({e})") from None
+
+
+def half_dtype(device):
+    """bf16 on GPUs that have it (RTX 30xx / 40xx, A100 ...), else fp16 (Kaggle's T4 / P100)."""
+    return torch.bfloat16 if torch.cuda.get_device_capability(device)[0] >= 8 else torch.float16
+
+
+def autocast(device):
+    """Mixed precision on a GPU (faster, less memory); plain fp32 on the CPU."""
+    return torch.autocast("cuda", dtype=half_dtype(device)) if device.type == "cuda" else torch.autocast("cpu", enabled=False)
 
 
 def n_params(m: nn.Module) -> int:
@@ -190,67 +177,90 @@ class ViT(nn.Module):
         return self
 
 
-# ====================================================================== CLIP image encoder (model 3)
-class QuickGELU(nn.Module):
-    def forward(self, x):
-        return x * torch.sigmoid(1.702 * x)
+# ====================================================================== Hiera-B video (models 3, 4)
+def unroll(x, size, strides, times):
+    """Hiera's token order: apply `strides` `times` times so each pooling window is contiguous."""
+    b, _, c = x.shape
+    x = x.view(b, *size, c)
+    for _ in range(times):
+        size = [n // s for n, s in zip(size, strides)]
+        x = x.view(b, *[v for n, s in zip(size, strides) for v in (n, s)], c)
+        k = x.dim()
+        x = x.permute(0, *range(2, k - 1, 2), *range(1, k - 1, 2), k - 1).flatten(0, len(strides))
+        b *= math.prod(strides)
+    return x.reshape(-1, math.prod(size) * math.prod(strides) ** times, c)
 
 
-class LayerNorm32(nn.LayerNorm):
-    """CLIP's LayerNorm: computed in float32 even when the model runs in float16."""
-    def forward(self, x):
-        return super().forward(x.float()).to(x.dtype)
+class HieraAttention(nn.Module):
+    """Mask-unit attention (attention inside windows) or global attention, with optional q max-pooling."""
 
-
-class ResidualAttentionBlock(nn.Module):
-    def __init__(self, d, heads):
+    def __init__(self, dim, dim_out, heads, q_stride, window, windowed):
         super().__init__()
-        self.attn = nn.MultiheadAttention(d, heads)
-        self.ln_1, self.ln_2 = LayerNorm32(d), LayerNorm32(d)
-        self.mlp = nn.Sequential(OrderedDict(c_fc=nn.Linear(d, d * 4), gelu=QuickGELU(), c_proj=nn.Linear(d * 4, d)))
+        self.heads, self.q_stride, self.window, self.windowed = heads, q_stride, window, windowed
+        self.qkv, self.proj = nn.Linear(dim, 3 * dim_out), nn.Linear(dim_out, dim_out)
 
     def forward(self, x):
-        h = self.ln_1(x)
-        x = x + self.attn(h, h, h, need_weights=False)[0]
-        return x + self.mlp(self.ln_2(x))
+        b, n, _ = x.shape
+        w = n // (self.q_stride * self.window) if self.windowed else 1
+        q, k, v = self.qkv(x).reshape(b, -1, w, 3, self.heads, self.qkv.out_features // 3 // self.heads).permute(3, 0, 4, 2, 1, 5)
+        if self.q_stride > 1:
+            q = q.view(b, self.heads, w, self.q_stride, -1, q.shape[-1]).max(dim=3).values
+        x = F.scaled_dot_product_attention(q, k, v)
+        return self.proj(x.transpose(1, 3).reshape(b, -1, self.proj.out_features))
 
 
-class CLIPTransformer(nn.Module):
-    def __init__(self, d, layers, heads):
+class HieraBlock(nn.Module):
+    def __init__(self, dim, dim_out, heads, q_stride, window, windowed):
         super().__init__()
-        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(d, heads) for _ in range(layers)])
+        self.norm1, self.norm2 = nn.LayerNorm(dim, eps=1e-6), nn.LayerNorm(dim_out, eps=1e-6)
+        self.attn, self.mlp = HieraAttention(dim, dim_out, heads, q_stride, window, windowed), Mlp(dim_out, 4 * dim_out)
+        self.proj = nn.Linear(dim, dim_out) if dim != dim_out else None
 
     def forward(self, x):
-        return self.resblocks(x)
+        xn = self.norm1(x)
+        if self.proj is not None:                                   # next stage: wider, fewer tokens
+            x = self.proj(xn).view(x.shape[0], self.attn.q_stride, -1, self.proj.out_features).max(dim=1).values
+        x = x + self.attn(xn)
+        return x + self.mlp(self.norm2(x))
 
 
-class CLIPVisual(nn.Module):
-    """CLIP ViT-B/16 image encoder (Radford et al., 2021) -> 512-d embedding.
-    Layer names = OpenAI's 'visual.*', so the released checkpoint (clip_b16) loads directly."""
+class Hiera(nn.Module):
+    """Hiera-B video (Ryali et al., ICML 2023), Kinetics-400: a clip of 16 frames x 224 x 224
+    (every 4th frame, RGB, mean 0.45 / std 0.225) -> one 768-d feature (mean of the last stage's
+    tokens + LayerNorm, the classifier input). Layer names = the official checkpoint."""
 
-    def __init__(self, res=224, patch=16, width=768, layers=12, heads=12, out_dim=512):
+    def __init__(self, embed_dim=96, heads=1, stages=(2, 3, 16, 3)):
         super().__init__()
-        self.conv1 = nn.Conv2d(3, width, patch, patch, bias=False)
-        self.class_embedding = nn.Parameter(torch.randn(width) * width ** -0.5)
-        self.positional_embedding = nn.Parameter(torch.randn((res // patch) ** 2 + 1, width) * width ** -0.5)
-        self.ln_pre, self.ln_post = LayerNorm32(width), LayerNorm32(width)
-        self.transformer = CLIPTransformer(width, layers, heads)
-        self.proj = nn.Parameter(torch.randn(width, out_dim) * width ** -0.5)
+        self.patch_embed = nn.Module()
+        self.patch_embed.proj = nn.Conv3d(3, embed_dim, (3, 7, 7), (2, 4, 4), (1, 3, 3))
+        self.tokens = (8, 56, 56)                                   # (16, 224, 224) / patch stride (2, 4, 4)
+        self.pos_embed_spatial = nn.Parameter(torch.zeros(1, 56 * 56, embed_dim))
+        self.pos_embed_temporal = nn.Parameter(torch.zeros(1, 8, embed_dim))
+        ends = [sum(stages[:i + 1]) - 1 for i in range(len(stages))]           # last block of each stage
+        window, stage, dim, self.blocks = 64, 0, embed_dim, nn.ModuleList()    # mask unit (1, 8, 8) = 64 tokens
+        for i in range(sum(stages)):
+            dim_out, pool = dim, i - 1 in ends[:3]                 # q-pooling at the first block of stages 2-4
+            if i - 1 in ends:
+                dim_out, heads, stage = dim * 2, heads * 2, stage + 1
+                window //= 4 if pool else 1
+            self.blocks.append(HieraBlock(dim, dim_out, heads, 4 if pool else 1, window, stage < 2 or (stage == 2 and i - 1 in ends)))
+            dim = dim_out
+        self.norm, self.dim = nn.LayerNorm(dim, eps=1e-6), dim
 
-    def forward(self, x):
-        x = self.conv1(x.to(self.conv1.weight.dtype)).flatten(2).permute(0, 2, 1)
-        cls = self.class_embedding.to(x.dtype) + torch.zeros(len(x), 1, x.shape[-1], dtype=x.dtype, device=x.device)
-        x = self.ln_pre(torch.cat([cls, x], 1) + self.positional_embedding.to(x.dtype))
-        x = self.transformer(x.permute(1, 0, 2)).permute(1, 0, 2)
-        return self.ln_post(x[:, 0]) @ self.proj
+    def forward(self, x):                                          # (b, 3, 16, 224, 224) -> (b, 768)
+        x = self.patch_embed.proj(x).flatten(2).transpose(1, 2)
+        t, hw = self.tokens[0], self.tokens[1] * self.tokens[2]
+        x = x + self.pos_embed_spatial.repeat(1, t, 1) + self.pos_embed_temporal.repeat_interleave(hw, dim=1)
+        x = unroll(x, list(self.tokens), (1, 2, 2), 3)
+        for blk in self.blocks:
+            x = blk(x)
+        return self.norm(x.mean(dim=1))
 
     def load_pretrained(self, path=None):
-        path = path or download("clip_b16")
-        if path is None:
-            return self
-        archive = torch.jit.load(str(path), map_location="cpu")
-        sd = {k[7:]: v for k, v in archive.state_dict().items() if k.startswith("visual.")}
-        self.load_state_dict(sd)
+        path = path or download("hiera_b16")
+        if path is not None:
+            sd = safe_load(path)["model_state"]
+            self.load_state_dict({k: v for k, v in sd.items() if not k.startswith("head.")})
         return self
 
 
@@ -407,8 +417,8 @@ def keep_min_size(b, s):
 class RCNN(nn.Module):
     """Faster R-CNN (Ren et al., 2015) with a ResNet-50-FPN backbone; with keypoints=17 it is
     Keypoint R-CNN (He et al., 2017). Inference only. Layer names = torchvision's checkpoints:
-      RCNN(classes=91)                 + load_pretrained("maskrcnn")      COCO, 80 object classes
       RCNN(classes=2, keypoints=17)    + load_pretrained("keypointrcnn")  people + body keypoints
+      RCNN(classes=91)                 Faster R-CNN, 80 COCO classes (tested, not used)
     __call__(list of RGB float tensors (3, H, W) in [0, 1]) -> list of dicts: boxes, scores,
     labels (+ keypoints (n, 17, 3), keypoints_scores)."""
 
@@ -591,205 +601,16 @@ def to_rgb_tensor(bgr: np.ndarray, device) -> torch.Tensor:
     return torch.from_numpy(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)).permute(2, 0, 1).float().div(255).to(device)
 
 
-# COCO category ids (1..90, with gaps) -> the 80 contiguous classes AI-VAD uses (person = 0)
-COCO_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28,
-            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
-            57, 58, 59, 60, 61, 62, 63, 64, 65, 67, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 84, 85,
-            86, 87, 88, 89, 90]
-COCO_TO_CONTIGUOUS = {c: i for i, c in enumerate(COCO_IDS)}
-
-
-# ====================================================================== FastPose (model 3)
-ALPHAPOSE = ROOT / "third_party" / "AlphaPose"
-
-
-def _alphapose_layers():
-    """AlphaPose's layer files, loaded as a package without AlphaPose's __init__ (which needs
-    compiled extensions we don't use)."""
-    root = ALPHAPOSE / "alphapose" / "models" / "layers"
-    if not root.exists():
-        raise SystemExit("third_party/AlphaPose missing: run  python third_party/fetch.py")
-    if "ap_layers" not in sys.modules:
-        pkg = types.ModuleType("ap_layers")
-        pkg.__path__ = [str(root)]
-        sys.modules["ap_layers"] = pkg
-    return (importlib.import_module("ap_layers.SE_Resnet").SEResnet,
-            importlib.import_module("ap_layers.DUC").DUC)
-
-
-class FastPose(nn.Module):
-    """AlphaPose FastPose ResNet-50 (Fang et al., TPAMI 2022): person crop 256x192 -> 17 heatmaps.
-    Same layers and names as alphapose/models/fastpose.py, so its checkpoint loads."""
-    IN_H, IN_W = 256, 192
-
-    def __init__(self, num_joints=17):
-        super().__init__()
-        SEResnet, DUC = _alphapose_layers()
-        self.preact = SEResnet("resnet50")
-        self.suffle1 = nn.PixelShuffle(2)
-        self.duc1 = DUC(512, 1024, upscale_factor=2, norm_layer=nn.BatchNorm2d)
-        self.duc2 = DUC(256, 512, upscale_factor=2, norm_layer=nn.BatchNorm2d)
-        self.conv_out = nn.Conv2d(128, num_joints, kernel_size=3, stride=1, padding=1)
-
-    def forward(self, x):
-        return self.conv_out(self.duc2(self.duc1(self.suffle1(self.preact(x)))))
-
-    def load_pretrained(self, path=None):
-        path = path or download("fastpose")
-        if path is not None:
-            self.load_state_dict(safe_load(path))
-        return self
-
-    @staticmethod
-    def _affine(center, scale_w, out_w, out_h, inv=False):
-        """AlphaPose get_affine_transform (rotation 0)."""
-        src = np.array([center, center + [0, -0.5 * scale_w], center + [0.5 * scale_w, -0.5 * scale_w]], np.float32)
-        dst = np.array([[out_w / 2, out_h / 2], [out_w / 2, out_h / 2 - out_w / 2],
-                        [out_w, out_h / 2 - out_w / 2]], np.float32)
-        return cv2.getAffineTransform(dst, src) if inv else cv2.getAffineTransform(src, dst)
-
-    @torch.no_grad()
-    def keypoints(self, bgr: np.ndarray, boxes: np.ndarray) -> np.ndarray:
-        """AlphaPose test transform + heatmap decoding -> (n, 17, 3) x, y, score in the image."""
-        if len(boxes) == 0:
-            return np.zeros((0, 17, 3), np.float32)
-        dev = next(self.parameters()).device
-        crops, frames = [], []
-        for x1, y1, x2, y2 in boxes:
-            w, h = x2 - x1, y2 - y1
-            c = np.array([x1 + w / 2, y1 + h / 2], np.float32)
-            ar = self.IN_W / self.IN_H
-            w, h = (w, w / ar) if w > ar * h else (h * ar, h)
-            w = w * 1.25
-            crop = cv2.warpAffine(bgr, self._affine(c, w, self.IN_W, self.IN_H), (self.IN_W, self.IN_H),
-                                  flags=cv2.INTER_LINEAR)
-            t = torch.from_numpy(crop.transpose(2, 0, 1).copy()).float() / 255
-            t[0] -= 0.406; t[1] -= 0.457; t[2] -= 0.480
-            crops.append(t)
-            frames.append((c, w))
-        hms = self(torch.stack(crops).to(dev)).float().cpu().numpy()
-        out = np.zeros((len(boxes), 17, 3), np.float32)
-        hh, hw = hms.shape[2:]
-        for k, (hm, (c, w)) in enumerate(zip(hms, frames)):
-            flat = hm.reshape(17, -1)
-            idx, val = flat.argmax(1), flat.max(1)
-            xy = np.stack([idx % hw, idx // hw], 1).astype(np.float32) * (val[:, None] > 0)
-            for j in range(17):
-                px, py = int(round(xy[j, 0])), int(round(xy[j, 1]))
-                if 1 < px < hw - 1 and 1 < py < hh - 1:
-                    xy[j] += np.sign([hm[j, py, px + 1] - hm[j, py, px - 1], hm[j, py + 1, px] - hm[j, py - 1, px]]) * 0.25
-            t = self._affine(c, w, hw, hh, inv=True)
-            out[k, :, :2] = xy @ t[:, :2].T + t[:, 2]
-            out[k, :, 2] = val
-        return out
-
-
-# ====================================================================== FlowNet2 / FlowNetC (models 3, 4)
-def _correlation_forward(input1, input2, rbot1, rbot2, output, pad_size, kernel_size, max_displacement,
-                         stride1, stride2, corr_multiply):
-    """= correlation_cuda_kernel.cu: out[b, (tj+r)*(2r+1)+(ti+r), y, x] =
-    sum_c in1[c,y,x] * in2[c, y+tj*stride2, x+ti*stride2] / C, zero padding."""
-    assert kernel_size == 1 and stride1 == 1 and pad_size == max_displacement, "FlowNetC settings"
-    b, c, h, w = input1.shape
-    r = max_displacement // stride2
-    p2 = F.pad(input2, (pad_size,) * 4)
-    out = input1.new_empty(b, (2 * r + 1) ** 2, h, w)
-    k = 0
-    for tj in range(-r, r + 1):
-        for ti in range(-r, r + 1):
-            dy, dx = pad_size + tj * stride2, pad_size + ti * stride2
-            out[:, k] = (input1 * p2[:, :, dy:dy + h, dx:dx + w]).sum(1) / c
-            k += 1
-    output.resize_(out.shape).copy_(out)
-    return 1
-
-
-def _resample2d_forward(input1, input2, output, kernel_size, bilinear):
-    """= resample2d_kernel.cu: warp input1 by the flow input2, bilinear, neighbours clamped."""
-    assert kernel_size == 1 and bilinear
-    b, c, h, w = input1.shape
-    ys, xs = torch.meshgrid(torch.arange(h, device=input1.device, dtype=input1.dtype),
-                            torch.arange(w, device=input1.device, dtype=input1.dtype), indexing="ij")
-    xf, yf = xs + input2[:, 0], ys + input2[:, 1]
-    x0, y0 = torch.floor(xf), torch.floor(yf)
-    al, be = (xf - x0).unsqueeze(1), (yf - y0).unsqueeze(1)
-    xl, xr = x0.clamp(0, w - 1).long(), (x0 + 1).clamp(0, w - 1).long()
-    yt, yb = y0.clamp(0, h - 1).long(), (y0 + 1).clamp(0, h - 1).long()
-    flat = input1.reshape(b, c, h * w)
-    g = lambda yy, xx: flat.gather(2, (yy * w + xx).reshape(b, 1, h * w).expand(b, c, h * w)).reshape(b, c, h, w)
-    output.copy_((1 - al) * (1 - be) * g(yt, xl) + al * (1 - be) * g(yt, xr) + (1 - al) * be * g(yb, xl) + al * be * g(yb, xr))
-    return 1
-
-
-def _channelnorm_forward(input1, output, norm_deg):
-    """= channelnorm_kernel.cu: per-pixel L2 norm over channels."""
-    output.copy_(input1.pow(norm_deg).sum(1, keepdim=True).pow(1.0 / norm_deg))
-    return 1
-
-
-def _install_flownet_ops():
-    """FlowNet2's code imports 3 compiled CUDA modules; register plain-PyTorch versions instead."""
-    def no_backward(*_):
-        raise NotImplementedError("inference only")
-    for name, fwd in (("correlation_cuda", _correlation_forward), ("resample2d_cuda", _resample2d_forward),
-                      ("channelnorm_cuda", _channelnorm_forward)):
-        if name not in sys.modules:
-            m = types.ModuleType(name)
-            m.forward, m.backward = fwd, no_backward
-            sys.modules[name] = m
-
-
-def flownet2(weights: bool = True) -> nn.Module:
-    """FlowNet2 (Ilg et al., CVPR 2017), AI-VAD's code (third_party/AIVAD), 162.5M parameters."""
-    aivad = ROOT / "third_party" / "AIVAD"
-    if not aivad.exists():
-        raise SystemExit("third_party/AIVAD missing: run  python third_party/fetch.py")
-    if str(aivad) not in sys.path:
-        sys.path.insert(0, str(aivad))
-    _install_flownet_ops()
-    net = importlib.import_module("pre_processing.flownet_networks.flownet2_models").FlowNet2()
-    path = download("flownet2") if weights else None
-    if path is not None:
-        pre = safe_load(path)["state_dict"]
-        own = net.state_dict()
-        bad = [k for k in own if k not in pre or pre[k].shape != own[k].shape]
-        if bad:
-            raise SystemExit(f"{path} is not the FlowNet2 checkpoint ({len(bad)} layers missing or "
-                             f"different, e.g. {bad[0]}); delete it and download it again")
-        net.load_state_dict({k: pre[k] for k in own})
-    return net.eval()
-
-
-class FlowNetC(nn.Module):
-    """The FIRST stage of FlowNet2 alone (FlowNetC + FlowNet2's input normalisation and x4
-    upsampling), with FlowNet2's trained weights. Model 4 uses it instead of the full 5-network
-    FlowNet2: ~4x fewer parameters, several times faster."""
-
-    def __init__(self, weights: bool = True):
-        super().__init__()
-        full = flownet2(weights)
-        self.flownetc, self.div_flow, self.rgb_max = full.flownetc, full.div_flow, full.rgb_max
-
-    @torch.no_grad()
-    def forward(self, inputs):                          # (b, 3, 2, h, w), 0-255, like FlowNet2
-        rgb_mean = inputs.contiguous().view(inputs.size()[:2] + (-1,)).mean(dim=-1).view(inputs.size()[:2] + (1, 1, 1))
-        x = (inputs - rgb_mean) / self.rgb_max
-        x = torch.cat((x[:, :, 0], x[:, :, 1]), dim=1)
-        flow = self.flownetc(x)[0] * self.div_flow
-        return F.interpolate(flow, scale_factor=4, mode="bilinear", align_corners=False)
-
-
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="download pretrained weights into weights/ and check each loads")
     ap.add_argument("cmd", choices=["download"])
-    ap.add_argument("names", nargs="+", help=f"any of {list(WEIGHT_SOURCES)}, or: astt_improved aivad aivad_lite behavior")
+    ap.add_argument("names", nargs="+", help=f"any of {list(WEIGHT_SOURCES)}, or a model / behavior")
     a = ap.parse_args()
-    groups = {"astt_improved": ["vit_b32_384"], "aivad": ["maskrcnn", "flownet2", "fastpose", "clip_b16"],
-              "aivad_lite": ["keypointrcnn", "flownet2"], "behavior": ["keypointrcnn"]}
-    load = {"vit_b32_384": lambda: ViT().load_pretrained(), "maskrcnn": lambda: RCNN(91).load_pretrained("maskrcnn"),
-            "keypointrcnn": lambda: RCNN(2, 17).load_pretrained("keypointrcnn"), "flownet2": lambda: flownet2(),
-            "fastpose": lambda: FastPose().load_pretrained(), "clip_b16": lambda: CLIPVisual().load_pretrained()}
+    groups = {"astt_baseline": [], "astt_improved": ["vit_b32_384"], "mulde": ["hiera_b16"], "mulde_improved": ["hiera_b16"],
+              "behavior": ["keypointrcnn"]}
+    load = {"vit_b32_384": lambda: ViT().load_pretrained(), "hiera_b16": lambda: Hiera().load_pretrained(),
+            "keypointrcnn": lambda: RCNN(2, 17).load_pretrained("keypointrcnn")}
     failed = []
     for w in dict.fromkeys(w for n in a.names for w in groups.get(n, [n])):   # each file once
         try:                                     # download, then load it into its network (a bad file shows up now)

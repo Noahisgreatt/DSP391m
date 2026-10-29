@@ -8,10 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
 WORKDIR /app
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
-# Pretrained weights for people tracking and model 4 (the deployable one), downloaded once.
-# Model 3 (AI-VAD, 331M) is the heavy research baseline and is not served.
+# Pretrained weights for people tracking (Keypoint R-CNN) and models 3 / 4 (Hiera-B), downloaded once.
 COPY src/models/nets.py src/models/nets.py
-RUN touch src/__init__.py src/models/__init__.py && python -m src.models.nets download keypointrcnn flownet2
+RUN touch src/__init__.py src/models/__init__.py && python -m src.models.nets download keypointrcnn hiera_b16
 
 # The papers' code is fetched at its pinned commits and checked (sha256), so a fresh clone builds.
 COPY third_party/ third_party/

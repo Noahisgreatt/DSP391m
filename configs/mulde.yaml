@@ -1,0 +1,30 @@
+# Model 3: MULDE (Micorek et al., CVPR 2024), frame-centric, the paper's method and settings with
+# Hiera-B, the smallest video backbone in the paper (its result on ShanghaiTech: 73.1% micro /
+# 82.7% macro AUC, beta 0.1). Values the paper doesn't give are marked "not in the paper".
+# Weights: python -m src.models.nets download mulde          Code: src/models/mulde.py
+#   python -m src.train    --config configs/mulde.yaml   (features of the training videos + fit)
+#   python -m src.evaluate --config configs/mulde.yaml
+
+model:
+  name: mulde
+  family: mulde
+  clip_frames: 16              # Hiera-B, Kinetics-400 (MAE pretrain + fine-tune): 16 frames x 224 x 224
+  frame_steps: [4]             # every 4th frame, as Hiera was trained (16 x 4 = 64 frames, 2.6 s at 25 fps)
+  train_stride: 4              # a feature for every 4th training frame (not in the paper; 4x less work)
+  batch_clips: 8               # clips per GPU batch (out of memory? 4)
+  hidden: 4096                 # density network: 2 hidden layers of 4096, GELU, one output
+
+density:                       # denoising score matching (paper Eq. 6)
+  sigma_low: 1.0e-3
+  sigma_high: 1.0              # = the std of the standardised features
+  levels: 16                   # L noise levels for scoring, log-spaced (spacing not in the paper)
+  beta: 0.1
+  lr: 1.0e-4
+  adam_betas: [0.5, 0.9]
+  batch_size: 2048
+  iterations: 20000            # not in the paper
+
+scoring:
+  gmm_components: 3            # the paper tries 1, 3 and 5 (which one it reports: not in the paper)
+  per_scene: false
+  smoothing_sigma: 7           # Gaussian smoothing over frames (width not in the paper)

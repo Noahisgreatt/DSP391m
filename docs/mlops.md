@@ -26,7 +26,7 @@
 | `POST /analyze` | upload a video -> per-frame scores, abnormal frames, unusual objects (models 3/4), LOITERING / COUNTER_FLOW / TOO_FAST events, link to the result video |
 | `GET /results/{job}/video` | the annotated video |
 | `GET /metrics` | Prometheus metrics |
-Served model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|aivad_lite|none`.
+Served model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|mulde|mulde_improved|none`.
 If that model isn't trained + evaluated yet, the API still starts with the behavior rules only and
 `/health` says why (`warning`); after training: `docker compose restart api`.
 

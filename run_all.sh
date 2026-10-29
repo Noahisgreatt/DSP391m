@@ -3,9 +3,9 @@
 # -> comparison + benchmark.
 #
 #   bash run_all.sh                      all 4 models (days on one GPU). Stopped? Run it again: it continues.
-#   bash run_all.sh aivad_lite           only some models (e.g. split the work over 2 computers)
+#   bash run_all.sh mulde_improved       only some models (e.g. split the work over 2 computers)
 #   bash run_all.sh --smoke              quick check that every step works (tiny training runs)
-# Models: astt_baseline (1), astt_improved (2), aivad (3), aivad_lite (4).
+# Models: astt_baseline (1), astt_improved (2), mulde (3), mulde_improved (4).
 #
 # Needs: Linux or WSL2 Ubuntu, an NVIDIA GPU (>= 6 GB), ~100 GB free disk, conda or Python >= 3.10,
 # and the data: either access to our DVC remote, or a Kaggle API token (~/.kaggle/kaggle.json).
@@ -16,8 +16,8 @@ step() { printf '\n========== %s\n' "$*"; }
 die()  { printf '\nSTOPPED: %s\nFix that, then run the same command again (finished steps are skipped).\n' "$*" >&2; exit 1; }
 MODE=full; MODELS=()
 for a in "$@"; do if [[ $a == --smoke ]]; then MODE=smoke; else MODELS+=("$a"); fi; done
-[[ ${#MODELS[@]} -gt 0 ]] || MODELS=(astt_baseline astt_improved aivad aivad_lite)
-for m in "${MODELS[@]}"; do [[ -f configs/$m.yaml ]] || die "unknown model '$m' (astt_baseline astt_improved aivad aivad_lite)"; done
+[[ ${#MODELS[@]} -gt 0 ]] || MODELS=(astt_baseline astt_improved mulde mulde_improved)
+for m in "${MODELS[@]}"; do [[ -f configs/$m.yaml ]] || die "unknown model '$m' (astt_baseline astt_improved mulde mulde_improved)"; done
 echo "models: ${MODELS[*]}"
 
 step "1/7 Python environment"
@@ -51,7 +51,7 @@ step "3/7 Code of the papers (third_party/, pinned + checksummed)"
 python third_party/fetch.py
 
 step "4/7 Pretrained weights (weights/): download + check each one loads"
-python -m src.models.nets download astt_improved aivad aivad_lite behavior \
+python -m src.models.nets download "${MODELS[@]}" behavior \
     || die "a weight file could not be downloaded: get it with the browser link printed above and save it in weights/"
 
 step "5/7 Data (ShanghaiTech Campus + our phone videos)"
@@ -89,7 +89,7 @@ for m in "${MODELS[@]}"; do                       # model by model; a version af
     python -m src.release --note "$m trained + evaluated" || true    # "nothing changed" = no new version
 done
 step "7/7 Results"
-if ls outputs/evaluation/{astt_baseline,astt_improved,aivad,aivad_lite}/metrics.json >/dev/null 2>&1; then
+if ls outputs/evaluation/{astt_baseline,astt_improved,mulde,mulde_improved}/metrics.json >/dev/null 2>&1; then
     dvc repro compare benchmark                   # all four evaluated: the full comparison
     cat outputs/comparison/comparison.md outputs/comparison/benchmark.md
 else

@@ -10,7 +10,7 @@ Endpoints
     GET  /results/{job_id}/video the result video (boxes, tags, heat-map, score curve)
     GET  /metrics                Prometheus metrics
 Which model is served: configs/api.yaml (api.model), or env
-VAD_MODEL=astt_baseline | astt_improved | aivad | aivad_lite | none.
+VAD_MODEL=astt_baseline | astt_improved | mulde | mulde_improved | none.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from src.utils import load_config
 class M:
     """Prometheus metrics (scraped at /metrics, shown in Grafana). Service health: requests,
     errors, latency. Model behaviour: time per step, score distribution, share of abnormal frames,
-    events, unusual objects: if these drift, incoming videos no longer look like the training data."""
+    events: if these drift, incoming videos no longer look like the training data."""
     REQUESTS = Counter("vad_api_requests_total", "HTTP requests", ["endpoint", "status"])
     LATENCY = Histogram("vad_api_request_seconds", "HTTP request duration", ["endpoint"],
                         buckets=(0.05, 0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600))
@@ -41,14 +41,13 @@ class M:
                              buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300))
     VIDEOS = Counter("vad_videos_analyzed_total", "Videos analyzed", ["model"])
     FRAMES = Counter("vad_frames_processed_total", "Frames processed", ["model"])
-    FRAME_SCORE = Histogram("vad_frame_anomaly_score", "Frame anomaly score (models 1-2: MSE, 3-4: AI-VAD score)",
+    FRAME_SCORE = Histogram("vad_frame_anomaly_score", "Frame anomaly score (models 1-2: MSE, 3-4: MULDE score)",
                             ["model"], buckets=(0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 0.5, 1, 2, 3, 5, 10))
     ABNORMAL_RATIO = Histogram("vad_abnormal_frame_ratio", "Share of frames above the threshold per video",
                                ["model"], buckets=(0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1))
     EVENTS = Counter("vad_behavior_events_total", "Behavior events detected", ["event"])
     MODEL = Info("vad_model", "Model being served")
     THRESHOLD = Gauge("vad_model_threshold", "Frame threshold (EER) in use, in the model's score units")
-    UNUSUAL = Counter("vad_unusual_objects_total", "Objects models 3/4 found unusual, by attribute", ["attribute"])
 
 
 CFG = load_config("configs/api.yaml")["api"]
@@ -127,8 +126,6 @@ def analyze(file: UploadFile = File(...), render: bool = True):
             M.FRAME_SCORE.labels(model).observe(s)
     if r["frame_scores"] is not None:
         M.ABNORMAL_RATIO.labels(model).observe(r["abnormal_ratio"])
-    for o in r["unusual_objects"]:
-        M.UNUSUAL.labels(o["attribute"]).inc()
     for name, n in r["event_counts"].items():
         M.EVENTS.labels(name).inc(n)
     r["job_id"] = job

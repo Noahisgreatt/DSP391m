@@ -23,14 +23,14 @@ To keep it running after you close the terminal:
 Each computer runs only its models, then sends its results (including the extracted attributes,
 so nothing is computed twice) to the main computer:
 ```bash
-bash run_all.sh aivad_lite                              # e.g. a friend: model 4 only
-tar czf aivad_lite_results.tgz outputs/training/aivad_lite outputs/evaluation/aivad_lite data/features/aivad_lite
+bash run_all.sh mulde_improved                          # e.g. a friend: model 4 only
+tar czf model4_results.tgz outputs/training/mulde_improved outputs/evaluation/mulde_improved data/features/hiera_b16
 ```
 On the main computer (where the versions are made and pushed):
 ```bash
-tar xzf aivad_lite_results.tgz && bash run_all.sh aivad_lite   # minutes: reuses the results, makes a version
+tar xzf model4_results.tgz && bash run_all.sh mulde_improved   # minutes: reuses the results, makes a version
 ```
-Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](docs/kaggle.md)), `aivad` (3), `aivad_lite` (4).
+Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](docs/kaggle.md)), `mulde` (3), `mulde_improved` (4).
 
 ### What you need
 | | |
@@ -49,7 +49,7 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
 | 4 | Pretrained weights into `weights/` (2 GB) | minutes |
 | 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
-| 6 | Behavior rules, then train + evaluate model 1, 2, 3, 4, saving version v1.0 ... v4.0 after each (`--smoke`: tiny runs) | full: 1-2 days in total |
+| 6 | Behavior rules, then train + evaluate model 1, 2, 3, 4, saving version v1.0 ... v4.0 after each (`--smoke`: tiny runs) | models 1, 2: about a day each; 3, 4: a few hours each |
 | 7 | Print the comparison table, the speed benchmark and the list of versions | - |
 
 ### Results
@@ -67,14 +67,14 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 |---|---|---|---|
 | 1 | `astt_baseline` | The thesis model (Tran Minh Tung, ASTT), **unchanged**, trained from scratch | 150.6M |
 | 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT = transfer learning, spatial tokens, residual prediction) | 100.4M |
-| 3 | `aivad` | AI-VAD (Reiss & Hoshen, TMLR 2025) with its original networks | 331.0M |
-| 4 | `aivad_lite` | Our lighter AI-VAD (Keypoint R-CNN + FlowNetC, per-camera, track-aware) | 98.3M |
+| 3 | `mulde` | MULDE (Micorek et al., CVPR 2024): Hiera-B video features + a density network | 70.7M |
+| 4 | `mulde_improved` | Our MULDE: two clip lengths, one model per camera, lighter density network | 58.1M |
 | - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 |
 
-**No model comes from a library call.** Every network (ViT, CLIP image encoder, Faster / Keypoint
-R-CNN, FastPose, FlowNet2) is PyTorch code in this project; only the pretrained *weights* are
+**No model comes from a library call.** Every network (ViT, Hiera video transformer, Keypoint
+R-CNN) is PyTorch code in this project; only the pretrained *weights* are
 downloaded. `tests/test_nets.py` shows each gives the same output as the reference implementation;
-`tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP and detectron2
+`tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP, detectron2 and hiera
 blocked. Details and the reason for every change: [docs/models.md](docs/models.md).
 
 ## Folder map
@@ -84,10 +84,10 @@ run_all.sh           ONE command for everything (above)
 kaggle.sh            train one model on a free Kaggle GPU at the same time (docs/kaggle.md)
 configs/             ALL settings
   data.yaml  behavior.yaml  api.yaml
-  astt_baseline.yaml  astt_improved.yaml  aivad.yaml  aivad_lite.yaml     (one per model)
+  astt_baseline.yaml  astt_improved.yaml  mulde.yaml  mulde_improved.yaml   (one per model)
 src/                 ALL code, one file per step
   data.py        1  get, unpack and split the data; feed it to the models
-  models/        2  astt.py (models 1, 2)  aivad.py (models 3, 4)  nets.py (the networks)
+  models/        2  astt.py (models 1, 2)  mulde.py (models 3, 4)  nets.py (the networks)
   train.py       3  train any model (the config decides which)
   evaluate.py    4  AUC / EER of one model, comparison table, size + speed benchmark
   behavior.py    5  people tracking, loitering, counter-flow
@@ -96,7 +96,7 @@ src/                 ALL code, one file per step
   release.py        versions v1.0, v1.1, v2.0 ... with metadata (what changed)
 api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
 tests/            pytest                                          docs/        notes for the report
-third_party/      thesis / AI-VAD / AlphaPose code (downloaded at fixed versions, never edited)
+third_party/      the thesis code (downloaded at a fixed version, never edited)
 dvc.yaml          the pipeline run_all.sh uses (dvc dag draws it)
 data/   (DVC)     raw/ -> processed/ ; metadata/ (data cards, split)
 outputs/(DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
@@ -110,11 +110,11 @@ python -m src.evaluate --config configs/astt_baseline.yaml   # AUC / EER on the 
 python -m src.evaluate --compare                             # table of all evaluated models
 python -m src.evaluate --benchmark                           # size and speed of every model
 python -m src.behavior --dataset shanghaitech                # loitering / counter-flow rules
-python -m src.demo --video clip.mp4 --model aivad_lite       # one video -> outputs/demo/clip/
+python -m src.demo --video clip.mp4 --model mulde_improved   # one video -> outputs/demo/clip/
 python -m src.release --note "what changed"                  # save a new version (v1.0, v1.1, v2.0 ...)
 python -m pytest -q tests                                    # everything still works?
 ```
-Same with DVC (records what was run): `dvc repro train@astt_baseline`, `dvc repro evaluate@aivad`,
+Same with DVC (records what was run): `dvc repro train@astt_baseline`, `dvc repro evaluate@mulde`,
 `dvc repro compare`.
 
 ## Versions (v1.0, v1.1, v2.0 ...)
@@ -141,7 +141,7 @@ FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), Docker + Prometh
 | How do I run everything? | `bash run_all.sh` |
 | Where is the thesis model? Is it really unchanged? | `src/models/astt.py` (ASTTThesis) on top of `third_party/ASTT`; `python third_party/fetch.py --check` proves the repo files are unedited; `tests/test_models.py` checks 150,579,876 parameters |
 | Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
-| What did you improve? | `configs/astt_improved.yaml`, `configs/aivad_lite.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |
+| What did you improve? | `configs/astt_improved.yaml`, `configs/mulde_improved.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |
 | How are loitering / counter-flow decided? | `src/behavior.py` (functions `loitering`, `counter_flow`); thresholds in `configs/behavior.yaml` |
 | How is accuracy measured? | `src/evaluate.py` (one metric code for all models) |
 | Which videos are train / test? | `data/metadata/split.json`, made by `src/data.py` |
