@@ -73,20 +73,34 @@ class Features:
         centres = np.arange(0, len(paths), stride)
         files = [self.root / split / f"{vid}_s{s}_e{stride}_n{len(paths)}.npy" if split else None
                  for s in self.m["frame_steps"]]
-        if all(f is not None and f.exists() for f in files):
-            return centres, np.concatenate([np.load(f) for f in files], 1).astype(np.float32)
+        cached = [load_cache(f, len(centres)) for f in files]
+        if all(c is not None for c in cached):
+            return centres, np.concatenate(cached, 1)
         frames = np.stack([cv2.cvtColor(cv2.resize(cv2.imread(str(p)), (224, 224), interpolation=cv2.INTER_AREA),
                                         cv2.COLOR_BGR2RGB) for p in paths])
         feats = []
-        for s, f in zip(self.m["frame_steps"], files):
-            if f is not None and f.exists():
-                feats.append(np.load(f).astype(np.float32))
-                continue
-            feats.append(self.clips(frames, s, centres))
-            if f is not None:
+        for s, f, c in zip(self.m["frame_steps"], files, cached):
+            feats.append(c if c is not None else self.clips(frames, s, centres))
+            if f is not None and c is None:                  # write whole or not at all (power cut)
                 f.parent.mkdir(parents=True, exist_ok=True)
-                np.save(f, feats[-1].astype(np.float16))
+                np.save(f.with_suffix(".tmp.npy"), feats[-1].astype(np.float16))
+                f.with_suffix(".tmp.npy").replace(f)
         return centres, np.concatenate(feats, 1)
+
+
+def load_cache(f, n):
+    """A cached feature file, or None if it is missing or broken (then it is computed again)."""
+    if f is None or not f.exists():
+        return None
+    try:
+        x = np.load(f).astype(np.float32)
+        if len(x) == n:
+            return x
+    except Exception:
+        pass
+    print(f"broken cache file, computing it again: {f.name}")
+    f.unlink()
+    return None
 
 
 # ====================================================================== 2. density network
@@ -164,6 +178,11 @@ def fit(cfg, smoke=False, fresh=False, max_hours=None):
     if fresh and out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
+    chash = config_hash({k: cfg[k] for k in ("model", "density", "scoring")})
+    done = [json.loads(f.read_text()) if f.exists() else {} for f in (out / "metrics.json", out / "run.json")]
+    if (out / "model.pth").exists() and done[0].get("finished") and done[1].get("config_hash") == chash:
+        return print(f"{out}/model.pth is already trained with these settings (e.g. on another computer): "
+                     "nothing to do (--fresh to train again)")
     vids, t0 = load_split(cfg)["train"][: 2 if smoke else None], time.time()
     ex = Features(cfg, device)
     feats = {}
@@ -188,7 +207,7 @@ def fit(cfg, smoke=False, fresh=False, max_hours=None):
     params = parameters(cfg)
     (out / "log.csv").write_text("\n".join(log) + "\n")
     (out / "run.json").write_text(json.dumps({
-        "model": m["name"], "config_hash": config_hash({k: cfg[k] for k in ("model", "density", "scoring")}),
+        "model": m["name"], "config_hash": chash,
         "git_commit": git_commit(), "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "device": str(device), "parameters": params, "train_videos": len(vids), "config": cfg}, indent=2, default=str))
     (out / "metrics.json").write_text(json.dumps({
