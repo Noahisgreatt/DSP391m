@@ -315,3 +315,110 @@ stages:
       md5: 959626f9481e713c2520853274814997.dir
       size: 374136
       nfiles: 107
+  train@astt_improved:
+    cmd: python -m src.train --config configs/astt_improved.yaml
+    deps:
+    - path: data/metadata/shanghaitech.json
+      hash: md5
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: src/models/astt.py
+      hash: md5
+      md5: c19a39cb3a17d908a46a871e92f453b7
+      size: 9924
+    - path: src/models/nets.py
+      hash: md5
+      md5: a7adb9b07d5ddd7ad3b26889d2c7447e
+      size: 29369
+    - path: src/train.py
+      hash: md5
+      md5: 7369b4441d3cbab2f06e51ee3199968a
+      size: 12533
+    params:
+      configs/astt_improved.yaml:
+        eval:
+          batch_size: 8
+        input:
+          loader: windows
+          color: rgb
+          frame_order: oldest_first
+        model:
+          name: astt_improved
+          pretrained: true
+          image_size: 384
+          output_size: 256
+          num_frames: 4
+          emb_dim: 768
+          mlp_dim: 1536
+          num_heads: 6
+          num_layers: 2
+          attn_dropout_rate: 0.0
+          dropout_rate: 0.1
+          decoder_channels: 256
+          residual_last_frame: true
+        train:
+          epochs: 4
+          batch_size: 8
+          optimizer: adamw
+          lr: 0.0001
+          backbone_lr: 1e-05
+          wd: 0.05
+          scheduler: cosine
+          warmup_steps: 500
+          train_steps: auto
+          loss: mse+gradient
+          gradient_loss_weight: 1.0
+          grad_clip: 1.0
+          amp: true
+          num_workers: 4
+          checkpoint_minutes: 20
+    outs:
+    - path: outputs/training/astt_improved/metrics.json
+      hash: md5
+      md5: d4a0b0732ec876ae01aa08ad68433ade
+      size: 119
+    - path: outputs/training/astt_improved/model.pth
+      hash: md5
+      md5: 152386cb88e23d48a7bdd10400290b7c
+      size: 401605847
+    - path: outputs/training/astt_improved/run.json
+      hash: md5
+      md5: 5fa9634fa530662414cc3cc12abec125
+      size: 2372
+  evaluate@astt_improved:
+    cmd: python -m src.evaluate --config configs/astt_improved.yaml
+    deps:
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: outputs/training/astt_improved/model.pth
+      hash: md5
+      md5: 152386cb88e23d48a7bdd10400290b7c
+      size: 401605847
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    - path: src/models/astt.py
+      hash: md5
+      md5: c19a39cb3a17d908a46a871e92f453b7
+      size: 9924
+    outs:
+    - path: outputs/evaluation/astt_improved/metrics.json
+      hash: md5
+      md5: 33b67e4b3c0e88fd98de9209260b6ae2
+      size: 394
+    - path: outputs/evaluation/astt_improved/roc.csv
+      hash: md5
+      md5: 89dbf6fceee25db8f72baf783adae631
+      size: 8385
+    - path: outputs/evaluation/astt_improved/scores
+      hash: md5
+      md5: 78e33dcd4f37754cd664ec29a45259a7.dir
+      size: 362989
+      nfiles: 107
