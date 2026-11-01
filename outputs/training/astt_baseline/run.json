@@ -1,0 +1,105 @@
+{
+  "model": "astt_baseline",
+  "config_file": "configs/astt_baseline.yaml",
+  "config_hash": "20eb0c7065",
+  "git_commit": "bb1ccb0",
+  "started_utc": "2026-10-27T08:07:06+00:00",
+  "device": "cuda",
+  "parameters": {
+    "STE (ViT-B/32-384)": 87528192,
+    "TTE (+ temporal CLS)": 9460224,
+    "Cross-attention": 2360064,
+    "Decoder": 51230627,
+    "Sphere (unused, kept from repo)": 769,
+    "Total": 150579876
+  },
+  "train_videos": 330,
+  "config": {
+    "paths": {
+      "raw_shanghaitech": "data/raw/shanghaitech",
+      "raw_manual": "data/raw/manual",
+      "processed": "data/processed",
+      "features": "data/features",
+      "metadata": "data/metadata",
+      "outputs": "outputs"
+    },
+    "shanghaitech": {
+      "kaggle_train": "nikanvasei/shanghaitech-campus-dataset",
+      "kaggle_test": "nikanvasei/shanghaitech-campus-dataset-test",
+      "fps": 25
+    },
+    "manual": {
+      "video_exts": [
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
+        ".MP4",
+        ".AVI",
+        ".MOV",
+        ".MKV"
+      ],
+      "fps_fallback": 30
+    },
+    "frames": {
+      "resize": [
+        640,
+        360
+      ],
+      "step": 1,
+      "jpg_quality": 95
+    },
+    "run": {
+      "workers": 4
+    },
+    "model": {
+      "name": "astt_baseline",
+      "pretrained": false,
+      "image_size": 384,
+      "output_size": 256,
+      "num_frames": 4,
+      "patch_size": 16,
+      "emb_dim": 768,
+      "mlp_dim": 1536,
+      "num_heads": 6,
+      "num_layers": 2,
+      "num_classes": 25,
+      "attn_dropout_rate": 0.0,
+      "dropout_rate": 0.1
+    },
+    "input": {
+      "loader": "repo",
+      "color": "bgr",
+      "frame_order": "newest_first"
+    },
+    "train": {
+      "epochs": 5,
+      "batch_size": 8,
+      "optimizer": "sgd",
+      "lr": 0.0001,
+      "backbone_lr": 0.0001,
+      "wd": 0.0001,
+      "scheduler": "onecycle",
+      "warmup_steps": 500,
+      "train_steps": "auto",
+      "loss": "mse",
+      "amp": false,
+      "num_workers": 4,
+      "checkpoint_minutes": 20
+    },
+    "eval": {
+      "batch_size": 1
+    },
+    "api": {
+      "model": "astt_improved",
+      "checkpoint": null,
+      "threshold": null,
+      "device": null,
+      "max_upload_mb": 500,
+      "work_dir": "outputs/api"
+    },
+    "monitoring": {
+      "training_metrics_port": 8001
+    }
+  }
+}

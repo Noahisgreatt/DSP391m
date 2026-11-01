@@ -1,0 +1,106 @@
+{
+  "model": "astt_improved",
+  "config_file": "configs/astt_improved.yaml",
+  "config_hash": "4f5ae64738",
+  "git_commit": "87bbedb",
+  "started_utc": "2026-11-01T10:31:44+00:00",
+  "device": "cuda",
+  "parameters": {
+    "STE (ViT-B/32-384)": 87528192,
+    "TTE (+ temporal CLS)": 9460224,
+    "Cross-attention": 2360064,
+    "Decoder": 1030819,
+    "Total": 100379299
+  },
+  "train_videos": 330,
+  "config": {
+    "paths": {
+      "raw_shanghaitech": "data/raw/shanghaitech",
+      "raw_manual": "data/raw/manual",
+      "processed": "data/processed",
+      "features": "data/features",
+      "metadata": "data/metadata",
+      "outputs": "outputs"
+    },
+    "shanghaitech": {
+      "kaggle_train": "nikanvasei/shanghaitech-campus-dataset",
+      "kaggle_test": "nikanvasei/shanghaitech-campus-dataset-test",
+      "fps": 25
+    },
+    "manual": {
+      "video_exts": [
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
+        ".MP4",
+        ".AVI",
+        ".MOV",
+        ".MKV"
+      ],
+      "fps_fallback": 30
+    },
+    "frames": {
+      "resize": [
+        640,
+        360
+      ],
+      "step": 1,
+      "jpg_quality": 95
+    },
+    "run": {
+      "workers": 4
+    },
+    "model": {
+      "name": "astt_improved",
+      "pretrained": true,
+      "image_size": 384,
+      "output_size": 256,
+      "num_frames": 4,
+      "emb_dim": 768,
+      "mlp_dim": 1536,
+      "num_heads": 6,
+      "num_layers": 2,
+      "attn_dropout_rate": 0.0,
+      "dropout_rate": 0.1,
+      "decoder_channels": 256,
+      "residual_last_frame": true
+    },
+    "input": {
+      "loader": "windows",
+      "color": "rgb",
+      "frame_order": "oldest_first"
+    },
+    "train": {
+      "epochs": 2,
+      "batch_size": 8,
+      "optimizer": "adamw",
+      "lr": 0.0001,
+      "backbone_lr": 1e-05,
+      "wd": 0.05,
+      "scheduler": "cosine",
+      "warmup_steps": 500,
+      "train_steps": "auto",
+      "loss": "mse+gradient",
+      "gradient_loss_weight": 1.0,
+      "grad_clip": 1.0,
+      "amp": true,
+      "num_workers": 4,
+      "checkpoint_minutes": 20
+    },
+    "eval": {
+      "batch_size": 8
+    },
+    "api": {
+      "model": "astt_improved",
+      "checkpoint": null,
+      "threshold": null,
+      "device": null,
+      "max_upload_mb": 500,
+      "work_dir": "outputs/api"
+    },
+    "monitoring": {
+      "training_metrics_port": 8001
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "videos": 107,
+  "events": {
+    "LOITERING": 66,
+    "COUNTER_FLOW": 202,
+    "TOO_FAST": 58
+  },
+  "frame_level": {
+    "frames": 40791,
+    "abnormal_frames": 17326,
+    "tpr": 0.42877755973681175,
+    "fpr": 0.23059876411676966,
+    "eer": 0.400910602189979,
+    "auc": 0.599089397810021
+  }
+}

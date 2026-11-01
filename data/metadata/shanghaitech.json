@@ -6,13 +6,11 @@
     "raw_dvc_md5": "846d595c5d4626da7a20e400ff567046.dir",
     "parts": {
       "train": {
-        "zip": "train.zip",
         "zip_bytes": 11717009285,
         "videos": 238,
         "label_files": 238
       },
       "test": {
-        "zip": "test.zip",
         "zip_bytes": 9362539834,
         "videos": 199,
         "label_files": 199

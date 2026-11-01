@@ -1,0 +1,15 @@
+{
+  "videos": 107,
+  "frames": 40791,
+  "abnormal_frames": 17326,
+  "auc_raw": 0.6666996491172317,
+  "auc_norm": 0.7615246970892643,
+  "auc_macro": 0.7512176131366655,
+  "eer": 0.2989354086495494,
+  "threshold_norm_at_eer": 0.1006660908460617,
+  "eer_raw": 0.374469369537803,
+  "threshold_raw_at_eer": 141.5358123779297,
+  "model": "mulde",
+  "seconds": 8789,
+  "fps_scored": 4.6
+}

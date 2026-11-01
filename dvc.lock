@@ -10,17 +10,13 @@ stages:
       nfiles: 2
     - path: src/data.py
       hash: md5
-      md5: 310a3ed346aee339555a1b3f24124b2c
-      size: 14253
-    params:
-      configs/data.yaml:
-        shanghaitech.kaggle_test: nikanvasei/shanghaitech-campus-dataset-test
-        shanghaitech.kaggle_train: nikanvasei/shanghaitech-campus-dataset
+      md5: 6506895d2bd0fcab32cfe82de294e167
+      size: 14285
     outs:
     - path: data/metadata/shanghaitech.json
       hash: md5
-      md5: 706411c5fd197ae5bad5218f42741eee
-      size: 937
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
     - path: data/processed/shanghaitech
       hash: md5
       md5: 2b3fcf353aa3e0b8f72d8bdfd9f9c6c9.dir
@@ -31,18 +27,195 @@ stages:
     deps:
     - path: data/metadata/shanghaitech.json
       hash: md5
-      md5: 706411c5fd197ae5bad5218f42741eee
-      size: 937
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
     - path: src/data.py
       hash: md5
-      md5: 310a3ed346aee339555a1b3f24124b2c
-      size: 14253
-    params:
-      configs/data.yaml:
-        shanghaitech.seed: 2020
-        shanghaitech.val_fraction: 0.0
+      md5: 6506895d2bd0fcab32cfe82de294e167
+      size: 14285
     outs:
     - path: data/metadata/split.json
       hash: md5
-      md5: b7cd8352e49465f4e753cd0175b61253
-      size: 5394
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+  behavior@shanghaitech:
+    cmd: python -m src.behavior --dataset shanghaitech
+    deps:
+    - path: data/metadata/shanghaitech.json
+      hash: md5
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: src/behavior.py
+      hash: md5
+      md5: 56eb5ece90fd9a1c622a7733fc1b8a14
+      size: 20922
+    - path: src/models/nets.py
+      hash: md5
+      md5: a7adb9b07d5ddd7ad3b26889d2c7447e
+      size: 29369
+    params:
+      configs/behavior.yaml:
+        counter_flow:
+          crowd_k: 6
+          crowd_radius_boxes: 8
+          min_crowd: 2
+          crowd_consistency: 0.5
+          angle_deg: 120
+          min_flow_consistency: 0.35
+          fast_bh_per_s: 2.0
+          fast_ratio: 2.0
+          min_seconds: 0.8
+        frame_size:
+        - 640
+        - 360
+        loitering:
+          seconds: 10
+          radius_boxes: 1.0
+          min_coverage: 0.7
+        optical_flow:
+          farneback:
+            pyr_scale: 0.5
+            levels: 3
+            winsize: 15
+            iterations: 3
+            poly_n: 5
+            poly_sigma: 1.2
+          grid:
+          - 8
+          - 8
+          n_bins: 8
+          min_magnitude: 1.0
+          min_moving_fraction: 0.02
+          min_cell_samples: 30
+        tracking:
+          detector_conf: 0.5
+          detector_size: 800
+          match_iou: 0.3
+          max_lost: 30
+          window: 8
+          smooth: 5
+          min_speed: 0.4
+    outs:
+    - path: data/features/normal_maps/shanghaitech
+      hash: md5
+      md5: c09d655e2cd8d21a1b23b96018c136ce.dir
+      size: 14994
+      nfiles: 13
+    - path: data/features/optical_flow/shanghaitech
+      hash: md5
+      md5: 469de36c13289ab704ee987ca43630df.dir
+      size: 10595184
+      nfiles: 331
+    - path: data/features/tracking/shanghaitech
+      hash: md5
+      md5: 550388e11a6ea490e5aaa591acb75cb2.dir
+      size: 5676860
+      nfiles: 108
+    - path: outputs/behavior/shanghaitech/events
+      hash: md5
+      md5: cd76bd5a0248125f78c94f652ceb4bee.dir
+      size: 125924
+      nfiles: 214
+    - path: outputs/behavior/shanghaitech/metrics.json
+      hash: md5
+      md5: fee3cd38ab0dc88ad1904ad35cfdd097
+      size: 301
+  train@mulde:
+    cmd: python -m src.train --config configs/mulde.yaml
+    deps:
+    - path: data/metadata/shanghaitech.json
+      hash: md5
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: src/models/mulde.py
+      hash: md5
+      md5: 88d0c1ad474374ee17e5a277828e4ae5
+      size: 13476
+    - path: src/models/nets.py
+      hash: md5
+      md5: a7adb9b07d5ddd7ad3b26889d2c7447e
+      size: 29369
+    - path: src/train.py
+      hash: md5
+      md5: 7369b4441d3cbab2f06e51ee3199968a
+      size: 12533
+    params:
+      configs/mulde.yaml:
+        density:
+          sigma_low: 0.001
+          sigma_high: 1.0
+          levels: 16
+          beta: 0.1
+          lr: 0.0001
+          adam_betas:
+          - 0.5
+          - 0.9
+          batch_size: 2048
+          iterations: 20000
+        model:
+          name: mulde
+          family: mulde
+          clip_frames: 16
+          frame_steps:
+          - 4
+          train_stride: 4
+          batch_clips: 8
+          hidden: 4096
+        scoring:
+          gmm_components: 3
+          per_scene: false
+          smoothing_sigma: 7
+    outs:
+    - path: outputs/training/mulde/metrics.json
+      hash: md5
+      md5: 4ffdbe2ab887944bafbe53ed82148536
+      size: 165
+    - path: outputs/training/mulde/model.pth
+      hash: md5
+      md5: ef759594237c594d6c7636c8f0497d57
+      size: 79786557
+    - path: outputs/training/mulde/run.json
+      hash: md5
+      md5: 851509c2c0c7b37f474e7e909a5f544f
+      size: 1886
+  evaluate@mulde:
+    cmd: python -m src.evaluate --config configs/mulde.yaml
+    deps:
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: outputs/training/mulde/model.pth
+      hash: md5
+      md5: ef759594237c594d6c7636c8f0497d57
+      size: 79786557
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    - path: src/models/mulde.py
+      hash: md5
+      md5: 88d0c1ad474374ee17e5a277828e4ae5
+      size: 13476
+    outs:
+    - path: outputs/evaluation/mulde/metrics.json
+      hash: md5
+      md5: f551991e8b6c990a1a43b84068e55a37
+      size: 381
+    - path: outputs/evaluation/mulde/roc.csv
+      hash: md5
+      md5: ce0655f1fac3ad8c86db617b9f7614e5
+      size: 8375
+    - path: outputs/evaluation/mulde/scores
+      hash: md5
+      md5: 6ea129995270f175bd3791897db5702c.dir
+      size: 376236
+      nfiles: 107
