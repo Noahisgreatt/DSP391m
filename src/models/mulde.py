@@ -116,13 +116,20 @@ class DensityNet(nn.Module):
         return self.net(torch.cat([x, sigma.log()[:, None]], 1)).squeeze(1)
 
 
-def train_density(X, d, hidden, device, iterations, log=None):
-    """Denoising score matching over noise levels (MULDE Eq. 6)."""
+def train_density(X, d, hidden, device, iterations, log=None, ckpt=None):
+    """Denoising score matching over noise levels (MULDE Eq. 6). With ckpt: saved every 1000 steps,
+    and a stopped run (power cut) continues from there."""
     net = DensityNet(X.shape[1], hidden).to(device)
     opt = torch.optim.Adam(net.parameters(), lr=d["lr"], betas=tuple(d["adam_betas"]))
+    start = 1
+    if ckpt is not None and Path(ckpt).exists():
+        ck = torch.load(ckpt, map_location=device, weights_only=False)
+        net.load_state_dict(ck["net"]); opt.load_state_dict(ck["opt"])
+        start, log[:] = ck["step"] + 1, ck["log"]
+        print(f"density: continuing from step {ck['step']}")
     X = torch.as_tensor(X, device=device)
     lo, hi = np.log(d["sigma_low"]), np.log(d["sigma_high"])
-    for it in range(1, iterations + 1):
+    for it in range(start, iterations + 1):
         x = X[torch.randint(len(X), (d["batch_size"],), device=device)]
         sigma = torch.exp(torch.empty(len(x), device=device).uniform_(lo, hi))
         noise = torch.randn_like(x) * sigma[:, None]
@@ -133,6 +140,11 @@ def train_density(X, d, hidden, device, iterations, log=None):
         if log is not None and (it % 200 == 0 or it == iterations):
             log.append(f"{it},{loss.item():.6f}")
             print(f"density step {it}/{iterations} loss {loss.item():.4f}")
+        if ckpt is not None and it % 1000 == 0:
+            torch.save({"net": net.state_dict(), "opt": opt.state_dict(), "step": it, "log": list(log)}, f"{ckpt}.tmp")
+            Path(f"{ckpt}.tmp").replace(ckpt)                 # written whole or not at all
+    if ckpt is not None:
+        Path(ckpt).unlink(missing_ok=True)
     return net.eval()
 
 
@@ -195,7 +207,7 @@ def fit(cfg, smoke=False, fresh=False, max_hours=None):
     mean, std = X.mean(0), X.std(0) + 1e-6
     Xs = ((X - mean) / std).astype(np.float32)
     log = ["step,loss"]
-    net = train_density(Xs, d, m["hidden"], device, 50 if smoke else d["iterations"], log)
+    net = train_density(Xs, d, m["hidden"], device, 50 if smoke else d["iterations"], log, out / "density_checkpoint.pth")
     sigmas = np.geomspace(d["sigma_low"], d["sigma_high"], d["levels"])
     F = levels(net, Xs, sigmas, device)
     k = 1 if smoke else s["gmm_components"]
