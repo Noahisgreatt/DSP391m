@@ -219,3 +219,99 @@ stages:
       md5: 6ea129995270f175bd3791897db5702c.dir
       size: 376236
       nfiles: 107
+  train@mulde_improved:
+    cmd: python -m src.train --config configs/mulde_improved.yaml
+    deps:
+    - path: data/metadata/shanghaitech.json
+      hash: md5
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: src/models/mulde.py
+      hash: md5
+      md5: 88d0c1ad474374ee17e5a277828e4ae5
+      size: 13476
+    - path: src/models/nets.py
+      hash: md5
+      md5: a7adb9b07d5ddd7ad3b26889d2c7447e
+      size: 29369
+    - path: src/train.py
+      hash: md5
+      md5: 7369b4441d3cbab2f06e51ee3199968a
+      size: 12533
+    params:
+      configs/mulde_improved.yaml:
+        density:
+          sigma_low: 0.001
+          sigma_high: 1.0
+          levels: 16
+          beta: 0.1
+          lr: 0.0001
+          adam_betas:
+          - 0.5
+          - 0.9
+          batch_size: 2048
+          iterations: 20000
+        model:
+          name: mulde_improved
+          family: mulde
+          clip_frames: 16
+          frame_steps:
+          - 2
+          - 4
+          train_stride: 4
+          batch_clips: 8
+          hidden: 2048
+        scoring:
+          gmm_components: 3
+          per_scene: true
+          smoothing_sigma: 7
+    outs:
+    - path: outputs/training/mulde_improved/metrics.json
+      hash: md5
+      md5: 2edb21db45bffc1b5e1e7beab5b6aa4a
+      size: 168
+    - path: outputs/training/mulde_improved/model.pth
+      hash: md5
+      md5: c10cb9842e330af1c1805a0cc2acc6a9
+      size: 29654397
+    - path: outputs/training/mulde_improved/run.json
+      hash: md5
+      md5: 3136b6609ea9fe022c57c1b252b469c8
+      size: 1913
+  evaluate@mulde_improved:
+    cmd: python -m src.evaluate --config configs/mulde_improved.yaml
+    deps:
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: outputs/training/mulde_improved/model.pth
+      hash: md5
+      md5: c10cb9842e330af1c1805a0cc2acc6a9
+      size: 29654397
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    - path: src/models/mulde.py
+      hash: md5
+      md5: 88d0c1ad474374ee17e5a277828e4ae5
+      size: 13476
+    outs:
+    - path: outputs/evaluation/mulde_improved/metrics.json
+      hash: md5
+      md5: e0d0be647cb717027686d56b103a80b2
+      size: 393
+    - path: outputs/evaluation/mulde_improved/roc.csv
+      hash: md5
+      md5: 0684f4b699a6754018bca38292d80804
+      size: 8384
+    - path: outputs/evaluation/mulde_improved/scores
+      hash: md5
+      md5: 959626f9481e713c2520853274814997.dir
+      size: 374136
+      nfiles: 107

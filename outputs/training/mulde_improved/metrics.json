@@ -1,0 +1,9 @@
+{
+  "finished": true,
+  "train_videos": 330,
+  "train_clips": 68790,
+  "mixtures": 14,
+  "final_loss": 1342.443237,
+  "minutes": 188.2,
+  "parameters_total": 58133185
+}

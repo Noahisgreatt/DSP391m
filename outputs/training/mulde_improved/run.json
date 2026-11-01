@@ -1,0 +1,93 @@
+{
+  "model": "mulde_improved",
+  "config_hash": "81852a8ebd",
+  "git_commit": "b26af8d",
+  "started_utc": "2026-11-01T19:54:36+00:00",
+  "device": "cuda",
+  "parameters": {
+    "Hiera-B (features)": 50784960,
+    "density network": 7348225,
+    "Total": 58133185
+  },
+  "train_videos": 330,
+  "config": {
+    "paths": {
+      "raw_shanghaitech": "data/raw/shanghaitech",
+      "raw_manual": "data/raw/manual",
+      "processed": "data/processed",
+      "features": "data/features",
+      "metadata": "data/metadata",
+      "outputs": "outputs"
+    },
+    "shanghaitech": {
+      "kaggle_train": "nikanvasei/shanghaitech-campus-dataset",
+      "kaggle_test": "nikanvasei/shanghaitech-campus-dataset-test",
+      "fps": 25
+    },
+    "manual": {
+      "video_exts": [
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".mkv",
+        ".MP4",
+        ".AVI",
+        ".MOV",
+        ".MKV"
+      ],
+      "fps_fallback": 30
+    },
+    "frames": {
+      "resize": [
+        640,
+        360
+      ],
+      "step": 1,
+      "jpg_quality": 95
+    },
+    "run": {
+      "workers": 4
+    },
+    "model": {
+      "name": "mulde_improved",
+      "family": "mulde",
+      "clip_frames": 16,
+      "frame_steps": [
+        2,
+        4
+      ],
+      "train_stride": 4,
+      "batch_clips": 8,
+      "hidden": 2048
+    },
+    "density": {
+      "sigma_low": 0.001,
+      "sigma_high": 1.0,
+      "levels": 16,
+      "beta": 0.1,
+      "lr": 0.0001,
+      "adam_betas": [
+        0.5,
+        0.9
+      ],
+      "batch_size": 2048,
+      "iterations": 20000
+    },
+    "scoring": {
+      "gmm_components": 3,
+      "per_scene": true,
+      "smoothing_sigma": 7
+    },
+    "api": {
+      "model": "astt_improved",
+      "checkpoint": null,
+      "threshold": null,
+      "device": null,
+      "max_upload_mb": 500,
+      "work_dir": "outputs/api"
+    },
+    "monitoring": {
+      "training_metrics_port": 8001
+    }
+  }
+}

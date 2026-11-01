@@ -1,0 +1,335 @@
+{
+  "version": "v4.0",
+  "changes": [
+    "setting astt_improved.train.epochs: 2 -> 4",
+    "astt_improved: ADDED (100,379,299 parameters)",
+    "mulde_improved: ADDED (58,133,185 parameters, AUC 66.3%)"
+  ],
+  "note": "mulde_improved trained + evaluated",
+  "created_utc": "2026-11-01T20:39:12+00:00",
+  "git_commit": "b26af8d",
+  "data": {
+    "manual": {
+      "md5": "2b4fa41f12fd76eae4a2cfc0d46d4148.dir",
+      "size_gb": 0.56,
+      "files": 45
+    },
+    "shanghaitech": {
+      "md5": "846d595c5d4626da7a20e400ff567046.dir",
+      "size_gb": 21.08,
+      "files": 2
+    },
+    "videos": {
+      "shanghaitech": 437,
+      "frames": 315396,
+      "train": 330,
+      "test": 107,
+      "manual": null
+    }
+  },
+  "code_md5": "d3699000ab7b90a3f602634103952c0c",
+  "settings": {
+    "api": {
+      "api": {
+        "model": "astt_improved",
+        "checkpoint": null,
+        "threshold": null,
+        "device": null,
+        "max_upload_mb": 500,
+        "work_dir": "outputs/api"
+      },
+      "monitoring": {
+        "training_metrics_port": 8001
+      }
+    },
+    "astt_baseline": {
+      "model": {
+        "name": "astt_baseline",
+        "pretrained": false,
+        "image_size": 384,
+        "output_size": 256,
+        "num_frames": 4,
+        "patch_size": 16,
+        "emb_dim": 768,
+        "mlp_dim": 1536,
+        "num_heads": 6,
+        "num_layers": 2,
+        "num_classes": 25,
+        "attn_dropout_rate": 0.0,
+        "dropout_rate": 0.1
+      },
+      "input": {
+        "loader": "repo",
+        "color": "bgr",
+        "frame_order": "newest_first"
+      },
+      "train": {
+        "epochs": 2,
+        "batch_size": 8,
+        "optimizer": "sgd",
+        "lr": 0.0001,
+        "backbone_lr": 0.0001,
+        "wd": 0.0001,
+        "scheduler": "onecycle",
+        "warmup_steps": 500,
+        "train_steps": "auto",
+        "loss": "mse",
+        "amp": false,
+        "num_workers": 4,
+        "checkpoint_minutes": 20
+      },
+      "eval": {
+        "batch_size": 1
+      }
+    },
+    "astt_improved": {
+      "model": {
+        "name": "astt_improved",
+        "pretrained": true,
+        "image_size": 384,
+        "output_size": 256,
+        "num_frames": 4,
+        "emb_dim": 768,
+        "mlp_dim": 1536,
+        "num_heads": 6,
+        "num_layers": 2,
+        "attn_dropout_rate": 0.0,
+        "dropout_rate": 0.1,
+        "decoder_channels": 256,
+        "residual_last_frame": true
+      },
+      "input": {
+        "loader": "windows",
+        "color": "rgb",
+        "frame_order": "oldest_first"
+      },
+      "train": {
+        "epochs": 4,
+        "batch_size": 8,
+        "optimizer": "adamw",
+        "lr": 0.0001,
+        "backbone_lr": 1e-05,
+        "wd": 0.05,
+        "scheduler": "cosine",
+        "warmup_steps": 500,
+        "train_steps": "auto",
+        "loss": "mse+gradient",
+        "gradient_loss_weight": 1.0,
+        "grad_clip": 1.0,
+        "amp": true,
+        "num_workers": 4,
+        "checkpoint_minutes": 20
+      },
+      "eval": {
+        "batch_size": 8
+      }
+    },
+    "behavior": {
+      "frame_size": [
+        640,
+        360
+      ],
+      "optical_flow": {
+        "farneback": {
+          "pyr_scale": 0.5,
+          "levels": 3,
+          "winsize": 15,
+          "iterations": 3,
+          "poly_n": 5,
+          "poly_sigma": 1.2
+        },
+        "grid": [
+          8,
+          8
+        ],
+        "n_bins": 8,
+        "min_magnitude": 1.0,
+        "min_moving_fraction": 0.02,
+        "min_cell_samples": 30
+      },
+      "tracking": {
+        "detector_conf": 0.5,
+        "detector_size": 800,
+        "match_iou": 0.3,
+        "max_lost": 30,
+        "window": 8,
+        "smooth": 5,
+        "min_speed": 0.4
+      },
+      "counter_flow": {
+        "crowd_k": 6,
+        "crowd_radius_boxes": 8,
+        "min_crowd": 2,
+        "crowd_consistency": 0.5,
+        "angle_deg": 120,
+        "min_flow_consistency": 0.35,
+        "fast_bh_per_s": 2.0,
+        "fast_ratio": 2.0,
+        "min_seconds": 0.8
+      },
+      "loitering": {
+        "seconds": 10,
+        "radius_boxes": 1.0,
+        "min_coverage": 0.7
+      }
+    },
+    "data": {
+      "paths": {
+        "raw_shanghaitech": "data/raw/shanghaitech",
+        "raw_manual": "data/raw/manual",
+        "processed": "data/processed",
+        "features": "data/features",
+        "metadata": "data/metadata",
+        "outputs": "outputs"
+      },
+      "shanghaitech": {
+        "kaggle_train": "nikanvasei/shanghaitech-campus-dataset",
+        "kaggle_test": "nikanvasei/shanghaitech-campus-dataset-test",
+        "fps": 25
+      },
+      "manual": {
+        "video_exts": [
+          ".mp4",
+          ".avi",
+          ".mov",
+          ".mkv",
+          ".MP4",
+          ".AVI",
+          ".MOV",
+          ".MKV"
+        ],
+        "fps_fallback": 30
+      },
+      "frames": {
+        "resize": [
+          640,
+          360
+        ],
+        "step": 1,
+        "jpg_quality": 95
+      },
+      "run": {
+        "workers": 4
+      }
+    },
+    "mulde": {
+      "model": {
+        "name": "mulde",
+        "family": "mulde",
+        "clip_frames": 16,
+        "frame_steps": [
+          4
+        ],
+        "train_stride": 4,
+        "batch_clips": 8,
+        "hidden": 4096
+      },
+      "density": {
+        "sigma_low": 0.001,
+        "sigma_high": 1.0,
+        "levels": 16,
+        "beta": 0.1,
+        "lr": 0.0001,
+        "adam_betas": [
+          0.5,
+          0.9
+        ],
+        "batch_size": 2048,
+        "iterations": 20000
+      },
+      "scoring": {
+        "gmm_components": 3,
+        "per_scene": false,
+        "smoothing_sigma": 7
+      }
+    },
+    "mulde_improved": {
+      "model": {
+        "name": "mulde_improved",
+        "family": "mulde",
+        "clip_frames": 16,
+        "frame_steps": [
+          2,
+          4
+        ],
+        "train_stride": 4,
+        "batch_clips": 8,
+        "hidden": 2048
+      },
+      "density": {
+        "sigma_low": 0.001,
+        "sigma_high": 1.0,
+        "levels": 16,
+        "beta": 0.1,
+        "lr": 0.0001,
+        "adam_betas": [
+          0.5,
+          0.9
+        ],
+        "batch_size": 2048,
+        "iterations": 20000
+      },
+      "scoring": {
+        "gmm_components": 3,
+        "per_scene": true,
+        "smoothing_sigma": 7
+      }
+    }
+  },
+  "models": {
+    "astt_baseline": {
+      "parameters": 150579876,
+      "weights_md5": "0347b73ce3cc77f1989add8d79b2aeb9",
+      "test": null
+    },
+    "astt_improved": {
+      "parameters": 100379299,
+      "weights_md5": "152386cb88e23d48a7bdd10400290b7c",
+      "test": null
+    },
+    "mulde": {
+      "parameters": 70724289,
+      "weights_md5": "ef759594237c594d6c7636c8f0497d57",
+      "test": {
+        "auc_raw": 0.6666996491172317,
+        "auc_norm": 0.7615246970892643,
+        "auc_macro": 0.7512176131366655,
+        "eer": 0.2989354086495494,
+        "fps_scored": 4.6
+      }
+    },
+    "mulde_improved": {
+      "parameters": 58133185,
+      "weights_md5": "c10cb9842e330af1c1805a0cc2acc6a9",
+      "test": {
+        "auc_raw": 0.6625478499701603,
+        "auc_norm": 0.7141724165505057,
+        "auc_macro": 0.7345288992532368,
+        "eer": 0.33451216723441746,
+        "fps_scored": 15.3
+      }
+    }
+  },
+  "behavior": {
+    "videos": 107,
+    "events": {
+      "LOITERING": 66,
+      "COUNTER_FLOW": 202,
+      "TOO_FAST": 58
+    },
+    "frame_level": {
+      "frames": 40791,
+      "abnormal_frames": 17326,
+      "tpr": 0.42877755973681175,
+      "fpr": 0.23059876411676966,
+      "eer": 0.400910602189979,
+      "auc": 0.599089397810021
+    }
+  },
+  "software": {
+    "python": "3.10.22",
+    "torch": "2.14.1+cu130",
+    "cuda": "13.0",
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU"
+  }
+}

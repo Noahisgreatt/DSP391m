@@ -1,9 +1,9 @@
 {
   "model": "astt_improved",
   "config_file": "configs/astt_improved.yaml",
-  "config_hash": "4f5ae64738",
-  "git_commit": "87bbedb",
-  "started_utc": "2026-11-01T10:31:44+00:00",
+  "config_hash": "0f3328c552",
+  "git_commit": "f203a09",
+  "started_utc": "2026-10-29T03:03:07+00:00",
   "device": "cuda",
   "parameters": {
     "STE (ViT-B/32-384)": 87528192,
@@ -12,7 +12,7 @@
     "Decoder": 1030819,
     "Total": 100379299
   },
-  "train_videos": 330,
+  "train_videos": 169,
   "config": {
     "paths": {
       "raw_shanghaitech": "data/raw/shanghaitech",
@@ -72,7 +72,7 @@
       "frame_order": "oldest_first"
     },
     "train": {
-      "epochs": 2,
+      "epochs": 5,
       "batch_size": 8,
       "optimizer": "adamw",
       "lr": 0.0001,
