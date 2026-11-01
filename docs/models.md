@@ -17,7 +17,7 @@ detectron2 / hiera blocked.
 | Model | What | Parameters | Training budget |
 |---|---|---|---|
 | 1 `astt_baseline` | thesis ASTT, unchanged except 2 epochs | 150,579,876 | 2 epochs (thesis: 5) |
-| 2 `astt_improved` | our ASTT | 100,379,299 | 2 epochs |
+| 2 `astt_improved` | our ASTT | 100,379,299 | 4 epochs (on Kaggle; planned 2) |
 | 3 `mulde` | MULDE (CVPR 2024) on Hiera-B | 70,724,289 | features + density fit |
 | 4 `mulde_improved` | our MULDE | 58,133,185 | features + density fit |
 
@@ -44,8 +44,9 @@ applies it. Verified: same weights give the same output as the previous version 
 (difference 0.0). The repo builds its ViT with `timm.create_model`; we pass it our own ViT
 (same layers, same parameter names) instead, without editing the repo file. Training = the repo's: BGR in [-1, 1], frames newest-first, SGD 1e-4
 momentum 0.9, OneCycleLR (500 warm-up), batch 8, fp32. **One change: 2 epochs instead of 5** (our
-time limit: one epoch takes 15-25 h on the laptop GPU); model 2 gets the same 2 epochs, so the
-comparison stays fair. Procedure-only additions: `train_steps: auto`, checkpoints every 20 min +
+time limit: one epoch takes 15-25 h on the laptop GPU). Model 2 was planned with the same 2
+epochs but its Kaggle runs trained 4 before the change reached them, so model 2 had twice the
+training budget: keep this in mind when comparing models 1 and 2. Procedure-only additions: `train_steps: auto`, checkpoints every 20 min +
 automatic resume.
 
 ## Model 2: ASTT improved (ours), 100,379,299 parameters
