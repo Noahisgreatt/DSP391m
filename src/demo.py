@@ -100,6 +100,12 @@ class Analyzer:
             scores, extra = self.scorer(fdir, video.stem, details=True, cache=False, num_workers=0)
             maps = extra.get("maps")
         tm["model_s"] = round(time.time() - t2, 2)
+        warning = self.warning
+        valid = np.array([]) if scores is None else scores[~np.isnan(scores)]
+        if len(valid) and np.mean(valid > self.threshold) > 0.8:
+            warning = ("The model finds almost every frame abnormal: this camera probably looks unlike the 13 "
+                       "ShanghaiTech training cameras, so its scores are not calibrated here. Trust the people "
+                       "boxes (behavior rules); for the model, train it on normal video from this camera.")
         result_video = None
         if draw:                                                      # 5. draw
             t3 = time.time()
@@ -108,7 +114,8 @@ class Analyzer:
             tm["render_s"] = round(time.time() - t3, 2)
         tm["total_s"] = round(time.time() - t0, 2)
         abnormal = [] if scores is None else [int(i) for i in np.flatnonzero(np.nan_to_num(scores) > self.threshold)]
-        result = {"video": video.name, "frames": len(frames), "fps": fps, **self.info(), "abnormal_frames": abnormal,
+        result = {"video": video.name, "frames": len(frames), "fps": fps, **self.info(), "warning": warning,
+                  "abnormal_frames": abnormal,
                   "abnormal_ratio": round(len(abnormal) / max(len(frames), 1), 4),
                   "frame_scores": None if scores is None else [None if np.isnan(s) else round(float(s), 6) for s in scores],
                   "people_tracked": int(len(np.unique(tracks[:, 1]))) if len(tracks) else 0,
@@ -162,67 +169,95 @@ def _color(b):
     return tuple(int(c) for c in cv2.cvtColor(np.uint8([[[int(180 * b / 8), 255, 255]]]), cv2.COLOR_HSV2BGR)[0, 0])
 
 
-def _label(img, text, x, y, color):
-    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-    x, y = int(min(max(x, 0), img.shape[1] - tw - 4)), int(max(y, th + 4))
-    cv2.rectangle(img, (x, y - th - 4), (x + tw + 4, y + 2), color, -1)
-    cv2.putText(img, text, (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 1, cv2.LINE_AA)
+def _label(img, text, x, y, color, f=1.0):
+    fs, th = 0.5 * f, max(1, round(f))
+    (tw, tht), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs, th)
+    x, y = int(min(max(x, 0), img.shape[1] - tw - 4)), int(max(y, tht + 4))
+    cv2.rectangle(img, (x, y - tht - 4), (x + tw + 4, y + 2 * th), color, -1)
+    cv2.putText(img, text, (x + 2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, fs, WHITE, th, cv2.LINE_AA)
 
 
-def _people(img, rows, vel, moving, flags):
-    """One box + one direction arrow per person; flagged people get a thick box and tags."""
+def _people(img, rows, vel, moving, flags, sx=1.0, sy=1.0, f=1.0):
+    """One box + one direction arrow per person; flagged people get a thick box and tags.
+    Boxes are in frame_size coordinates; (sx, sy) scales them to the drawn video."""
+    th = max(1, round(f))
     for (_, tid, x1, y1, x2, y2, _), v, mv, fl in zip(rows, vel, moving, flags):
+        x1, x2, y1, y2 = x1 * sx, x2 * sx, y1 * sy, y2 * sy
         cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
         col = (200, 200, 200)
         if mv:
             col = _color(int(angle_to_bin(np.arctan2(v[1], v[0]) % (2 * np.pi), 8)))
             s = float(np.hypot(*v))
-            end = (int(cx + v[0] / s * max(s * 12, 18)), int(cy + v[1] / s * max(s * 12, 18)))
-            cv2.arrowedLine(img, (cx, cy), end, (0, 0, 0), 4, tipLength=0.3)
-            cv2.arrowedLine(img, (cx, cy), end, col, 2, tipLength=0.3)
+            n = max(s * 12, 18) * f
+            end = (int(cx + v[0] / s * n), int(cy + v[1] / s * n))
+            cv2.arrowedLine(img, (cx, cy), end, (0, 0, 0), 2 * th + 2, tipLength=0.3)
+            cv2.arrowedLine(img, (cx, cy), end, col, 2 * th, tipLength=0.3)
         else:
-            cv2.circle(img, (cx, cy), 4, col, -1)
+            cv2.circle(img, (cx, cy), 4 * th, col, -1)
         tags = [(t, c) for bit, t, c in TAGS if int(fl) & bit]
-        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), tags[0][1] if tags else col, 2 if tags else 1)
+        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), tags[0][1] if tags else col, 2 * th if tags else th)
         for j, (text, c) in enumerate(tags):
-            _label(img, f"#{int(tid)} {text}" if j == 0 else text, x1, y1 - 4 - 20 * (len(tags) - 1 - j), c)
+            _label(img, f"#{int(tid)} {text}" if j == 0 else text, x1, y1 - 4 * f - 20 * f * (len(tags) - 1 - j), c, f)
 
 
-def _curve(img, scores, t, thr, h=56):
+def _curve(img, scores, t, thr, f=1.0):
     H, W = img.shape[:2]
+    h, th = int(56 * f), max(1, round(f))
     ov = img.copy()
     cv2.rectangle(ov, (0, H - h), (W, H), (0, 0, 0), -1)
     cv2.addWeighted(ov, 0.5, img, 0.5, 0, img)
     valid = scores[~np.isnan(scores)]
     hi = max(float(valid.max()) if len(valid) else 1.0, thr * 1.5)
     xy = lambda i, s: (int(i * (W - 1) / max(len(scores) - 1, 1)), int(H - 4 - (h - 8) * min(s / hi, 1)))
-    cv2.line(img, (0, xy(0, thr)[1]), (W, xy(0, thr)[1]), YELLOW, 1)
+    cv2.line(img, (0, xy(0, thr)[1]), (W, xy(0, thr)[1]), YELLOW, th)
     for i in range(1, t + 1):
         if not (np.isnan(scores[i - 1]) or np.isnan(scores[i])):
-            cv2.line(img, xy(i - 1, scores[i - 1]), xy(i, scores[i]), RED if scores[i] > thr else WHITE, 1)
+            cv2.line(img, xy(i - 1, scores[i - 1]), xy(i, scores[i]), RED if scores[i] > thr else WHITE, th)
+
+
+def region_masks(maps, thr):
+    """Models 1/2: WHERE a frame is abnormal = pixels whose prediction error is far above the usual
+    error AT THAT PLACE in this video. Edges and textures are always hard to predict; without
+    subtracting each pixel's median error the whole scene's outline would be painted red."""
+    step = max(1, len(maps) // 200)                              # median of <= 200 frames: little memory
+    usual = np.median(maps[::step].astype(np.float32), axis=0)
+    kernel = np.ones((5, 5), np.uint8)
+    return lambda t: cv2.morphologyEx(((maps[t].astype(np.float32) - usual) > 4 * thr).astype(np.uint8),
+                                      cv2.MORPH_OPEN, kernel)    # drops single-pixel speckles
 
 
 def render(out_path, frame_paths, size, fps, tracks, vel, moving, flags, scores=None, maps=None, thr=None,
-           model_name=""):
+           model_name="", max_width=1280):
+    """Draw at the video's own resolution (at most max_width wide), not at the 640x360 the
+    behavior steps work in, so the result is as sharp as the input."""
     fidx = tracks[:, 0].astype(int)
-    writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, tuple(size))
+    h0, w0 = read_frame(frame_paths[0]).shape[:2]
+    k = min(1.0, max_width / w0)
+    out = (int(w0 * k) // 2 * 2, int(h0 * k) // 2 * 2)
+    sx, sy, f = out[0] / size[0], out[1] / size[1], max(out[0] / 640, 1.0)
+    region = region_masks(maps, thr) if maps is not None else None
+    writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, out)
     for t, p in enumerate(frame_paths):
-        img = read_frame(p, size)
+        img = read_frame(p, out)
         bad = scores is not None and not np.isnan(scores[t]) and scores[t] > thr
-        if bad and maps is not None:                              # models 1/2: where it failed to predict
-            m = cv2.resize(maps[t].astype(np.float32), tuple(size)) > 4 * thr
-            red = img.copy()
-            red[m] = RED
-            cv2.addWeighted(red, 0.45, img, 0.55, 0, img)
+        if bad and region is not None:                           # models 1/2: the unusual region
+            m = cv2.resize(region(t), out, interpolation=cv2.INTER_NEAREST).astype(bool)
+            if m.any():
+                red = img.copy()
+                red[m] = RED
+                cv2.addWeighted(red, 0.4, img, 0.6, 0, img)
+                cs, _ = cv2.findContours(m.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(img, cs, -1, RED, max(1, round(f)))
         if scores is not None:
-            _curve(img, scores, t, thr)
+            _curve(img, scores, t, thr, f)
         if bad:
-            _label(img, f"ABNORMAL FRAME ({model_name} {scores[t]:.3f})", img.shape[1] // 2 - 120, 24, RED)
+            _label(img, f"ABNORMAL FRAME ({model_name} {scores[t]:.3f})", out[0] // 2 - 120 * f, 24 * f, RED, f)
         sel = fidx == t
-        _people(img, tracks[sel], vel[sel], moving[sel], flags[sel])
+        _people(img, tracks[sel], vel[sel], moving[sel], flags[sel], sx, sy, f)
         for i, name in enumerate(DIRECTIONS):                     # arrow colour legend
-            cv2.rectangle(img, (6, 6 + i * 16), (18, 18 + i * 16), _color(i), -1)
-            cv2.putText(img, name, (22, 16 + i * 16), cv2.FONT_HERSHEY_SIMPLEX, 0.4, WHITE, 1)
+            y = int((6 + i * 16) * f)
+            cv2.rectangle(img, (int(6 * f), y), (int(18 * f), y + int(12 * f)), _color(i), -1)
+            cv2.putText(img, name, (int(22 * f), y + int(10 * f)), cv2.FONT_HERSHEY_SIMPLEX, 0.4 * f, WHITE, max(1, round(f)))
         writer.write(img)
     writer.release()
     return browser_mp4(out_path)

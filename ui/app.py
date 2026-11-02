@@ -24,7 +24,7 @@ LEGEND = """**How to read the result video**
 - Every person has a **box** and an **arrow** = walking direction (colour legend top-left); a dot = standing still.
 - **Red box** `COUNTER-FLOW` = walks against the crowd, `TOO FAST` = runs; **yellow box** `LOITERING` = stays in one place.
 - Bottom: the model's **anomaly score** over time; yellow line = threshold. Above it: `ABNORMAL FRAME`
-  (models 1-2 also paint the abnormal **region** red)."""
+  (models 1-2 also paint red the **region** that is unusual compared with the rest of this video)."""
 
 
 def models():
