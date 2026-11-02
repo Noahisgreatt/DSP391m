@@ -1,0 +1,15 @@
+{
+  "videos": 107,
+  "frames": 40791,
+  "abnormal_frames": 17326,
+  "auc_raw": 0.46974280255943,
+  "auc_norm": 0.639468109313438,
+  "auc_macro": 0.6771207771250858,
+  "eer": 0.4015848990906732,
+  "threshold_norm_at_eer": 0.3381956219673157,
+  "eer_raw": 0.5518865621465496,
+  "threshold_raw_at_eer": 0.07796742022037506,
+  "model": "astt_baseline",
+  "seconds": 1397,
+  "fps_scored": 29.2
+}

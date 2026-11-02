@@ -1,6 +1,6 @@
 {
-  "epochs_done": 1,
-  "finished": false,
-  "final_train_loss": 0.08839029075132568,
+  "epochs_done": 2,
+  "finished": true,
+  "final_train_loss": 0.07757534159772282,
   "parameters_total": 150579876
 }

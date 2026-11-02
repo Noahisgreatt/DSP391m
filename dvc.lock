@@ -422,3 +422,108 @@ stages:
       md5: 78e33dcd4f37754cd664ec29a45259a7.dir
       size: 362989
       nfiles: 107
+  train@astt_baseline:
+    cmd: python -m src.train --config configs/astt_baseline.yaml
+    deps:
+    - path: data/metadata/shanghaitech.json
+      hash: md5
+      md5: 724a487bb8ca9cad15718b257c55ffd5
+      size: 882
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: src/models/astt.py
+      hash: md5
+      md5: c19a39cb3a17d908a46a871e92f453b7
+      size: 9924
+    - path: src/models/nets.py
+      hash: md5
+      md5: a7adb9b07d5ddd7ad3b26889d2c7447e
+      size: 29369
+    - path: src/train.py
+      hash: md5
+      md5: 7369b4441d3cbab2f06e51ee3199968a
+      size: 12533
+    params:
+      configs/astt_baseline.yaml:
+        eval:
+          batch_size: 1
+        input:
+          loader: repo
+          color: bgr
+          frame_order: newest_first
+        model:
+          name: astt_baseline
+          pretrained: false
+          image_size: 384
+          output_size: 256
+          num_frames: 4
+          patch_size: 16
+          emb_dim: 768
+          mlp_dim: 1536
+          num_heads: 6
+          num_layers: 2
+          num_classes: 25
+          attn_dropout_rate: 0.0
+          dropout_rate: 0.1
+        train:
+          epochs: 2
+          batch_size: 8
+          optimizer: sgd
+          lr: 0.0001
+          backbone_lr: 0.0001
+          wd: 0.0001
+          scheduler: onecycle
+          warmup_steps: 500
+          train_steps: auto
+          loss: mse
+          amp: false
+          num_workers: 4
+          checkpoint_minutes: 20
+    outs:
+    - path: outputs/training/astt_baseline/metrics.json
+      hash: md5
+      md5: 443bce2df69f3b7f4011e37a3e9e4a31
+      size: 118
+    - path: outputs/training/astt_baseline/model.pth
+      hash: md5
+      md5: c93f2632d34d90bb5c43889738a4bc16
+      size: 602406243
+    - path: outputs/training/astt_baseline/run.json
+      hash: md5
+      md5: 42d9ac3e24ac16f018d565449a406c3f
+      size: 2334
+  evaluate@astt_baseline:
+    cmd: python -m src.evaluate --config configs/astt_baseline.yaml
+    deps:
+    - path: data/metadata/split.json
+      hash: md5
+      md5: 8cfe84b168a82feaa24bd9a2d4f05db8
+      size: 5382
+    - path: outputs/training/astt_baseline/model.pth
+      hash: md5
+      md5: c93f2632d34d90bb5c43889738a4bc16
+      size: 602406243
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    - path: src/models/astt.py
+      hash: md5
+      md5: c19a39cb3a17d908a46a871e92f453b7
+      size: 9924
+    outs:
+    - path: outputs/evaluation/astt_baseline/metrics.json
+      hash: md5
+      md5: 00b1346dfaeab6be37f1948ebb1d5b1f
+      size: 390
+    - path: outputs/evaluation/astt_baseline/roc.csv
+      hash: md5
+      md5: 9d5d958b86fafd54ce1d54b04bb1cd47
+      size: 8368
+    - path: outputs/evaluation/astt_baseline/scores
+      hash: md5
+      md5: 742bbd96fecbe01db7ec4f60d0ba5c55.dir
+      size: 354110
+      nfiles: 107
