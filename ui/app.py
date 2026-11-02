@@ -4,6 +4,7 @@ abnormal. It only talks to the FastAPI service (api/main.py) over HTTP.
 
     docker compose up -d        -> http://localhost:7860
     python -m ui.app            -> http://localhost:7860   (API_URL, default http://localhost:8000)
+    UI_SHARE=1 python -m ui.app -> also a public https://....gradio.live link (72 h) for people elsewhere
 """
 from __future__ import annotations
 
@@ -149,4 +150,5 @@ def build() -> gr.Blocks:
 
 if __name__ == "__main__":
     build().queue(default_concurrency_limit=1).launch(server_name="0.0.0.0", server_port=int(os.environ.get("UI_PORT", 7860)),
-                                                     allowed_paths=[str(OUT)])
+                                                     allowed_paths=[str(OUT)],
+                                                     share=os.environ.get("UI_SHARE") == "1")   # public *.gradio.live link
