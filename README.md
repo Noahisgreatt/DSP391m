@@ -10,6 +10,7 @@ labels) + our own phone videos. Four models are trained and compared on the same
 ```bash
 docker compose up --build -d          # (GPU: add  -f docker-compose.yml -f docker-compose.gpu.yml)
 ```
+No Docker? `bash serve.sh` does the same (API + web page, no Grafana).
 Open **http://localhost:7860**, upload a video, choose a model, press **Analyze**. You get the video
 back with a box and a direction arrow on every person, red / yellow boxes on the people who move
 against the crowd, run or loiter, the anomaly score over time, and tables of who did what and when.
@@ -106,6 +107,7 @@ blocked. Details and the reason for every change: [docs/models.md](docs/models.m
 
 ```
 run_all.sh           ONE command for everything (above)
+serve.sh             start the web page + API without Docker (bash serve.sh -> http://localhost:7860)
 kaggle.sh            train one model on a free Kaggle GPU at the same time (docs/kaggle.md)
 configs/             ALL settings
   data.yaml  behavior.yaml  api.yaml
