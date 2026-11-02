@@ -1,0 +1,44 @@
+{
+  "test_videos": 107,
+  "frames": 40791,
+  "astt_baseline": {
+    "parameters_M": 150.6,
+    "auc_raw": 0.46974280255943,
+    "auc_norm": 0.639468109313438,
+    "auc_macro": 0.6771207771250858,
+    "eer": 0.4015848990906732,
+    "fps_scored": 29.2
+  },
+  "astt_improved": {
+    "parameters_M": 100.4,
+    "auc_raw": 0.5756163409691182,
+    "auc_norm": 0.725523903198338,
+    "auc_macro": 0.8103705256635436,
+    "eer": 0.33046779031568674,
+    "fps_scored": 66.3
+  },
+  "mulde": {
+    "parameters_M": 70.7,
+    "auc_raw": 0.6666996491172317,
+    "auc_norm": 0.7615246970892643,
+    "auc_macro": 0.7512176131366655,
+    "eer": 0.2989354086495494,
+    "fps_scored": 4.6
+  },
+  "mulde_improved": {
+    "parameters_M": 58.1,
+    "auc_raw": 0.6625478499701603,
+    "auc_norm": 0.7141724165505057,
+    "auc_macro": 0.7345288992532368,
+    "eer": 0.33451216723441746,
+    "fps_scored": 15.3
+  },
+  "rules": {
+    "parameters_M": 0,
+    "auc_raw": 0.599089397810021,
+    "auc_norm": 0.599089397810021,
+    "auc_macro": null,
+    "eer": 0.400910602189979,
+    "fps_scored": null
+  }
+}

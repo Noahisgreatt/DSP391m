@@ -1,0 +1,66 @@
+{
+  "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "video": "01_0014",
+  "frames": 100,
+  "models": {
+    "astt_baseline": {
+      "parameters": {
+        "STE (ViT-B/32-384)": 87528192,
+        "TTE (+ temporal CLS)": 9460224,
+        "Cross-attention": 2360064,
+        "Decoder": 51230627,
+        "Sphere (unused, kept from repo)": 769,
+        "Total": 150579876
+      },
+      "ms_per_frame": {
+        "network": 28.16,
+        "total": 28.16
+      },
+      "fps": 35.51,
+      "peak_gpu_memory_mb": 1151
+    },
+    "astt_improved": {
+      "parameters": {
+        "STE (ViT-B/32-384)": 87528192,
+        "TTE (+ temporal CLS)": 9460224,
+        "Cross-attention": 2360064,
+        "Decoder": 1030819,
+        "Total": 100379299
+      },
+      "ms_per_frame": {
+        "network": 11.88,
+        "total": 11.88
+      },
+      "fps": 84.18,
+      "peak_gpu_memory_mb": 1365
+    },
+    "mulde": {
+      "parameters": {
+        "Hiera-B (features)": 50784960,
+        "density network": 19939329,
+        "Total": 70724289
+      },
+      "ms_per_frame": {
+        "features": 64.92,
+        "density": 0.26,
+        "total": 65.18
+      },
+      "fps": 15.34,
+      "peak_gpu_memory_mb": 1846
+    },
+    "mulde_improved": {
+      "parameters": {
+        "Hiera-B (features)": 50784960,
+        "density network": 7348225,
+        "Total": 58133185
+      },
+      "ms_per_frame": {
+        "features": 126.33,
+        "density": 0.06,
+        "total": 126.39
+      },
+      "fps": 7.91,
+      "peak_gpu_memory_mb": 1798
+    }
+  }
+}

@@ -527,3 +527,75 @@ stages:
       md5: 742bbd96fecbe01db7ec4f60d0ba5c55.dir
       size: 354110
       nfiles: 107
+  compare:
+    cmd: python -m src.evaluate --compare
+    deps:
+    - path: outputs/behavior/shanghaitech/metrics.json
+      hash: md5
+      md5: fee3cd38ab0dc88ad1904ad35cfdd097
+      size: 301
+    - path: outputs/evaluation/astt_baseline/metrics.json
+      hash: md5
+      md5: 00b1346dfaeab6be37f1948ebb1d5b1f
+      size: 390
+    - path: outputs/evaluation/astt_improved/metrics.json
+      hash: md5
+      md5: 33b67e4b3c0e88fd98de9209260b6ae2
+      size: 394
+    - path: outputs/evaluation/mulde/metrics.json
+      hash: md5
+      md5: f551991e8b6c990a1a43b84068e55a37
+      size: 381
+    - path: outputs/evaluation/mulde_improved/metrics.json
+      hash: md5
+      md5: e0d0be647cb717027686d56b103a80b2
+      size: 393
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    outs:
+    - path: outputs/comparison/comparison.json
+      hash: md5
+      md5: 9c1a7c0ea4afb82d28b31ffa79ffa6ba
+      size: 1077
+    - path: outputs/comparison/comparison.md
+      hash: md5
+      md5: ca586ebc30acc3c38471dd6da17c36f0
+      size: 584
+    - path: outputs/comparison/roc.png
+      hash: md5
+      md5: 3dbdc004d02038d8b3bd87a183d3b3cc
+      size: 103637
+  benchmark:
+    cmd: python -m src.evaluate --benchmark
+    deps:
+    - path: outputs/training/astt_baseline/model.pth
+      hash: md5
+      md5: c93f2632d34d90bb5c43889738a4bc16
+      size: 602406243
+    - path: outputs/training/astt_improved/model.pth
+      hash: md5
+      md5: 152386cb88e23d48a7bdd10400290b7c
+      size: 401605847
+    - path: outputs/training/mulde/model.pth
+      hash: md5
+      md5: ef759594237c594d6c7636c8f0497d57
+      size: 79786557
+    - path: outputs/training/mulde_improved/model.pth
+      hash: md5
+      md5: c10cb9842e330af1c1805a0cc2acc6a9
+      size: 29654397
+    - path: src/evaluate.py
+      hash: md5
+      md5: 14aacd1ee9381296e1441ad4b6c57825
+      size: 14741
+    outs:
+    - path: outputs/comparison/benchmark.json
+      hash: md5
+      md5: def386e537721cede4d0c4863ad24173
+      size: 1537
+    - path: outputs/comparison/benchmark.md
+      hash: md5
+      md5: 1e437125c83181e8f7bf04f3b298276b
+      size: 489
