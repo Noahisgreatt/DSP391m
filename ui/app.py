@@ -43,6 +43,11 @@ def models():
     return out, j["default"]
 
 
+def refresh():
+    choices, default = models()
+    return gr.Dropdown(choices=choices, value=default)
+
+
 def summary(r: dict) -> str:
     dur = r["frames"] / (r["fps"] or 25)
     bad_people = sorted({e["track_id"] for e in r["events"]})
@@ -129,7 +134,7 @@ def build() -> gr.Blocks:
             with gr.Tab("Raw result (JSON)"):
                 raw = gr.File(label="result.json")
         go.click(analyze, [video_in, model], [video_out, info, events, people, curve, raw])
-        page.load(lambda: gr.Dropdown(choices=models()[0]), None, model)   # models trained after start-up show up
+        page.load(refresh, None, model)              # every page load asks the API again (it may have started later)
     return page
 
 
