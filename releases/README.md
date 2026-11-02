@@ -4,7 +4,8 @@ Made with `python -m src.release`; details: `python -m src.release --diff vA vB`
 
 | Version | Date | Built from commit | Models (AUC micro on the test set) | Data | Note |
 |---|---|---|---|---|---|
+| **v4.3** | 2026-11-02 | `16f3cf0` | astt_baseline 47.0%, astt_improved 57.6%, mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | web page + API /models |
 | **v4.2** | 2026-11-02 | `1d8c88c` | astt_baseline 47.0%, astt_improved 57.6%, mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | astt_baseline trained + evaluated |
-| **v4.1** | 2026-11-01 | `1537082` | astt_baseline 0.0%, astt_improved 57.6%, mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | astt_improved trained + evaluated |
-| **v4.0** | 2026-11-01 | `b26af8d` | astt_baseline 0.0%, astt_improved 0.0%, mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | mulde_improved trained + evaluated |
-| **v2.0** | 2026-11-01 | `87bbedb` | astt_baseline 0.0%, mulde 66.7% | 330 train / 107 test videos | mulde trained + evaluated |
+| **v4.1** | 2026-11-01 | `1537082` | astt_baseline (not tested yet), astt_improved 57.6%, mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | astt_improved trained + evaluated |
+| **v4.0** | 2026-11-01 | `b26af8d` | astt_baseline (not tested yet), astt_improved (not tested yet), mulde 66.7%, mulde_improved 66.3% | 330 train / 107 test videos | mulde_improved trained + evaluated |
+| **v2.0** | 2026-11-01 | `87bbedb` | astt_baseline (not tested yet), mulde 66.7% | 330 train / 107 test videos | mulde trained + evaluated |
