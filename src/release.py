@@ -135,7 +135,9 @@ def write_index():
             "| Version | Date | Built from commit | Models (AUC micro on the test set) | Data | Note |", "|---|---|---|---|---|---|"]
     for v in reversed(versions()):
         c = read(REL / f"{v}.json")
-        ms = ", ".join(f"{m} {((d['test'] or {}).get('auc_raw') or 0) * 100:.1f}%" for m, d in c["models"].items()) or "-"
+        auc = lambda d: (d["test"] or {}).get("auc_raw")
+        ms = ", ".join(f"{m} {auc(d) * 100:.1f}%" if auc(d) is not None else f"{m} (not tested yet)"
+                       for m, d in c["models"].items()) or "-"
         rows.append(f"| **{v}** | {c['created_utc'][:10]} | `{c['git_commit']}` | {ms} | "
                     f"{c['data']['videos']['train']} train / {c['data']['videos']['test']} test videos | {c['note']} |")
     (REL / "README.md").write_text("\n".join(rows) + "\n")
