@@ -92,6 +92,7 @@ step "7/7 Results"
 if ls outputs/evaluation/{astt_baseline,astt_improved,mulde,mulde_improved}/metrics.json >/dev/null 2>&1; then
     dvc repro compare benchmark                   # all four evaluated: the full comparison
     cat outputs/comparison/comparison.md outputs/comparison/benchmark.md
+    git add dvc.lock outputs/comparison && git commit -qm "comparison + benchmark of all models" || true   # into git, for the report
 else
     python -m src.evaluate --compare || true      # only the models evaluated so far
 fi

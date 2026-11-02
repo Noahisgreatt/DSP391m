@@ -1,12 +1,10 @@
 """Download the third-party code this project builds on, at pinned commits, and prove it is unchanged.
 
-    python third_party/fetch.py            # all three (needs git + internet to github.com)
+    python third_party/fetch.py            # download (needs git + internet to github.com)
     python third_party/fetch.py --check    # only verify the sha256 sums
 
-Not committed to our repo because none of the licences allow republishing:
-  ASTT       no licence file              -> model 1 (the thesis model)
-  AIVAD      Yissum research licence      -> model 3 (AI-VAD)
-  AlphaPose  SJTU non-commercial licence  -> the pose network of model 3 (FastPose, 4 files used)
+Not committed to our repo because its licence does not allow republishing:
+  ASTT       no licence file              -> model 1 (the thesis model) and parts of model 2
 """
 from __future__ import annotations
 
