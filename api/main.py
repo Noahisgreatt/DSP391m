@@ -21,6 +21,7 @@ import shutil
 import threading
 import json
 import time
+import traceback
 import uuid
 from collections import OrderedDict
 from contextlib import asynccontextmanager
@@ -162,7 +163,8 @@ def analyze(file: UploadFile = File(...), model: str | None = None, render: bool
         with lock:
             r = analyzer(model).run(src, work, draw=render)
     except Exception as e:
-        raise HTTPException(422, f"could not analyze the video: {e}")
+        traceback.print_exc()                                         # the full error goes to the API log
+        raise HTTPException(422, f"could not analyze the video: {type(e).__name__}: {e}")
     finally:
         shutil.rmtree(work / "frames", ignore_errors=True)            # keep only the results
         src.unlink(missing_ok=True)

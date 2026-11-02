@@ -83,6 +83,15 @@ def tables(r: dict):
 
 
 def analyze(video, model, progress=gr.Progress()):
+    """Errors are shown in the page (not only in a pop-up that disappears)."""
+    try:
+        return run(video, model, progress)
+    except gr.Error as e:
+        empty = pd.DataFrame()
+        return None, f"### ❌ {e.message}\n\nDetails: the terminal running `bash serve.sh` / `outputs/api/api.log`.", empty, empty, empty, None
+
+
+def run(video, model, progress):
     if not video:
         raise gr.Error("Upload a video first.")
     progress(0.05, desc="Uploading and analyzing (people tracking, behavior rules, model)...")
