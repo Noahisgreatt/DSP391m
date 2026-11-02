@@ -126,7 +126,7 @@ def build() -> gr.Blocks:
                     "walks, who is **loitering**, moving **against the crowd** or **running**, and when the scene is abnormal.")
         with gr.Row():
             with gr.Column(scale=2):
-                video_in = gr.Video(label="Your video (.mp4 / .avi / .mov)", sources=["upload"], format="mp4")  # .avi -> .mp4 to preview
+                video_in = gr.Video(label="Your video (.mp4 / .avi / .mov)", sources=["upload"])  # sent as is: the API reads any format (no ffmpeg needed here)
                 model = gr.Dropdown(choices, value=default, label="Model")
                 go = gr.Button("Analyze", variant="primary")
                 gr.Markdown(LEGEND)
