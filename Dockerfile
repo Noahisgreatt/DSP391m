@@ -1,9 +1,9 @@
 # API image: FastAPI + our models. Trained weights are NOT baked in; they come from
-# outputs/ (dvc pull), mounted by docker-compose.yml.
-#   docker compose up --build            -> API :8000, Prometheus :9090, Grafana :3000
+# outputs/ (dvc pull), mounted by docker-compose.yml. The web page has its own small image (Dockerfile.ui).
+#   docker compose up --build -d   -> web page :7860, API :8000, Prometheus :9090, Grafana :3000
 FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 git ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements-api.txt .

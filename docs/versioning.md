@@ -7,7 +7,7 @@ says exactly what it is and what changed. One command does it:
 python -m src.release --note "what this version is"
 ```
 
-`run_all.sh` calls it after each model, so a full run makes v1.0 ... v4.0 by itself.
+`run_all.sh` calls it after each model, so a full run makes the versions by itself.
 
 ## 1. How the number is chosen (automatically)
 
@@ -29,6 +29,17 @@ The plan for this project:
 | **v4.0** | + **model 4** (MULDE improved) + comparison + benchmark | can MULDE be lighter and more accurate? |
 | v4.1, v4.2 ... | any change after that (tuning, more data, bug fixes) | did the change help? |
 | v5.0 | TensorRT versions of models 2 and 4 | how much faster in deployment? |
+
+What really happened (the models were trained on two computers, so two were added at once; the
+first version counts the models it already contains):
+
+| Version | What changed | Models (AUC micro) |
+|---|---|---|
+| **v2.0** | first version: model 1 (training) + model 3 (MULDE) trained and evaluated | mulde 66.7% |
+| **v4.0** | + model 2 (trained on Kaggle, 4 epochs) and model 4 evaluated; setting astt_improved epochs 2 -> 4 | + mulde_improved 66.3% |
+| **v4.1** | model 2 evaluated | + astt_improved 57.6% |
+| **v4.2** | model 1 finished (2 epochs) and evaluated: all four results | + astt_baseline 47.0% |
+| v4.3 | web page (Gradio) + API `/models`, people directions, browser-playable result video | unchanged |
 
 ## 2. What a version is made of
 

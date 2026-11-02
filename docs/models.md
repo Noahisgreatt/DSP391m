@@ -16,10 +16,39 @@ detectron2 / hiera blocked.
 
 | Model | What | Parameters | Training budget |
 |---|---|---|---|
-| 1 `astt_baseline` | thesis ASTT, unchanged except 2 epochs | 150,579,876 | 2 epochs (thesis: 5) |
-| 2 `astt_improved` | our ASTT | 100,379,299 | 4 epochs (on Kaggle; planned 2) |
-| 3 `mulde` | MULDE (CVPR 2024) on Hiera-B | 70,724,289 | features + density fit |
-| 4 `mulde_improved` | our MULDE | 58,133,185 | features + density fit |
+| 1 `astt_baseline` | thesis ASTT, unchanged except 2 epochs | 150,579,876 | 2 epochs (thesis: 5), laptop |
+| 2 `astt_improved` | our ASTT | 100,379,299 | 4 epochs (planned 2), Kaggle T4 |
+| 3 `mulde` | MULDE (CVPR 2024) on Hiera-B | 70,724,289 | features + 20,000 density steps (226 min), laptop |
+| 4 `mulde_improved` | our MULDE | 58,133,185 | features + 20,000 density steps (188 min), laptop |
+
+## Results (v4.2: 107 ShanghaiTech test videos, 40,791 frames, 17,326 abnormal)
+
+| Model | Parameters | AUC micro | AUC per-video norm | AUC macro | EER | Frames/s * | GPU memory * |
+|---|---|---|---|---|---|---|---|
+| 1 ASTT (thesis, unchanged) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 | 1151 MB |
+| 2 ASTT improved (ours) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** | 1365 MB |
+| 3 MULDE (Micorek et al.) | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 | 1846 MB |
+| 4 MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 | 1798 MB |
+| Behavior rules (no training) | 0 | 59.9% | - | - | 40.1% | - | - |
+
+\* `python -m src.evaluate --benchmark` (RTX 4050 Laptop, video 01_0014, everything computed from
+the frames). The "frames/s" in `metrics.json` is the whole test run and is not comparable: model 4
+reused the long-clip features cached by model 3. AUC micro = all frames of all videos together;
+per-video norm = scores min-max normalised per video first (the usual ShanghaiTech protocol);
+macro = mean of the per-video AUCs. Files: `outputs/comparison/` and `outputs/evaluation/<model>/`.
+
+What the numbers say:
+- **Model 2 vs model 1: the upgrade works.** +10.6 micro, +8.7 norm, +13.3 macro AUC, EER 40.2 ->
+  33.0%, with a third fewer parameters and 2.4x the speed. Caveat: model 2 trained 4 epochs, model 1
+  only 2. Model 1's micro AUC below 50% means its raw error is not comparable between cameras (a
+  busy camera has a high error even when normal); it still ranks frames inside one video (67.7% macro).
+- **Model 3** is the best on the whole test set (micro 66.7%, EER 29.9%). The paper reports 73.1% /
+  82.7% with Hiera-B; the gap comes from the details the paper does not give (listed under model 3).
+- **Model 4 vs model 3: not better.** It is 18% smaller but loses 0.4 micro and 4.8 norm AUC and is
+  2x slower (two Hiera passes per frame). The per-camera mixtures are fitted on ~1/13 of the
+  training frames each, which probably makes them less reliable than one mixture on all of them.
+- **Behavior rules** (66 loitering, 202 counter-flow, 58 too-fast events on the test set) need no
+  training and are weak frame detectors (59.9%), but they are the only part that says WHO and WHY.
 
 ## Model 1: ASTT, the thesis model (unchanged)
 Tran Minh Tung's PhD thesis (Ch. 3) and IEEE TCSVT 34 (2024) 8292-8309; code
@@ -60,7 +89,7 @@ decoder convolutions), so the comparison isolates the changes (`configs/astt_imp
 | Predict the change from the last frame (residual) | capacity goes to motion, where anomalies are |
 | Gradient loss (Liu et al., CVPR 2018) | sharper predictions, so blur is not mistaken for anomaly |
 | RGB, oldest-to-newest order, windows never cross two videos | what the pretrained ViT expects; fixes a repo quirk |
-| AdamW + cosine schedule, bf16 mixed precision | standard fine-tuning; ~2x faster, less GPU memory |
+| AdamW + cosine schedule, mixed precision (bf16; fp16 on GPUs without bf16 such as Kaggle's T4) | standard fine-tuning; ~2x faster, less GPU memory |
 
 ## Model 3: MULDE (Micorek et al., CVPR 2024), 70,724,289 parameters
 "MULDE: Multiscale Log-Density Estimation via Denoising Score Matching for Video Anomaly
@@ -94,7 +123,7 @@ Same method (`configs/mulde_improved.yaml`, changes marked `[CHANGE]`):
 |---|---|
 | Two clip lengths side by side: 16 x every 2nd frame (1.3 s) + 16 x every 4th (2.6 s) | short clips see fast motion (running, pushing against the flow), long ones slow behaviour (loitering); the long-clip features are shared with model 3 |
 | One Gaussian mixture per camera | ShanghaiTech has 13 cameras; what is "normal" (crowd size, walking direction, distance) differs per camera |
-| Density network 2 x 2048 instead of 2 x 4096 | 7.3M instead of 19.9M parameters, faster |
+| Density network 2 x 2048 instead of 2 x 4096 | 7.3M instead of 19.9M parameters |
 
 Each change can be switched off in the config, so its effect can be measured (ablation).
 

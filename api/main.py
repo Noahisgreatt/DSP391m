@@ -5,20 +5,24 @@ the model finds abnormal, and a result video. Prometheus metrics at /metrics.
     open http://localhost:8000/docs                           (try it in the browser)
 
 Endpoints
-    GET  /health                 is the service up, which model is loaded
-    POST /analyze                form field `file` = video (.mp4/.avi/.mov), ?render=true
-    GET  /results/{job_id}/video the result video (boxes, tags, heat-map, score curve)
+    GET  /health                 is the service up, which model is the default
+    GET  /models                 the four models: ready or not, parameters, test AUC / EER
+    POST /analyze                form field `file` = video (.mp4/.avi/.mov), ?model=...&render=true
+    GET  /results/{job_id}/video the result video (H.264: boxes, directions, tags, score curve)
     GET  /metrics                Prometheus metrics
-Which model is served: configs/api.yaml (api.model), or env
-VAD_MODEL=astt_baseline | astt_improved | mulde | mulde_improved | none.
+Default model: configs/api.yaml (api.model), or env VAD_MODEL=astt_baseline | astt_improved | mulde |
+mulde_improved | none. ?model= picks another one per request (loaded on first use, at most
+api.max_models_loaded kept in GPU memory). The web page (ui/app.py) is a client of this API.
 """
 from __future__ import annotations
 
 import os
 import shutil
 import threading
+import json
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,6 +31,11 @@ from fastapi.responses import FileResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 
 from src.utils import load_config
+
+MODELS = ("astt_baseline", "astt_improved", "mulde", "mulde_improved")
+NAMES = {"astt_baseline": "Model 1: ASTT (thesis)", "astt_improved": "Model 2: ASTT improved",
+         "mulde": "Model 3: MULDE (CVPR 2024)", "mulde_improved": "Model 4: MULDE improved",
+         "none": "Behavior rules only"}
 
 
 class M:
@@ -53,15 +62,40 @@ class M:
 CFG = load_config("configs/api.yaml")["api"]
 WORK = Path(CFG["work_dir"])
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".m4v"}
-state: dict = {}
+state: dict = {"analyzers": OrderedDict()}    # model name -> Analyzer (most recently used last)
 lock = threading.Lock()                      # one video at a time on the GPU
+
+
+def analyzer(name: str):
+    """The Analyzer of one model, loaded on first use; the least recently used is dropped beyond
+    api.max_models_loaded. A model that is not trained / evaluated serves the rules only."""
+    from src.demo import Analyzer
+    pool = state["analyzers"]
+    if name not in pool:
+        pool[name] = Analyzer(name, allow_missing=True)
+        while len(pool) > max(CFG.get("max_models_loaded", 2), 1):
+            pool.popitem(last=False)
+            import torch
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+    pool.move_to_end(name)
+    return pool[name]
+
+
+def model_card(name: str) -> dict:
+    """Is this model ready to serve, and how good is it on the 107 ShanghaiTech test videos."""
+    if name == "none":
+        return {"name": name, "title": NAMES[name], "ready": True}
+    ev, tr = Path(f"outputs/evaluation/{name}/metrics.json"), Path(f"outputs/training/{name}/run.json")
+    m = json.loads(ev.read_text()) if ev.exists() else {}
+    params = (json.loads(tr.read_text()).get("parameters") or {}).get("Total") if tr.exists() else None
+    return {"name": name, "title": NAMES[name], "ready": Path(f"outputs/training/{name}/model.pth").exists() and bool(m),
+            "parameters": params, **{k: m.get(k) for k in ("auc_raw", "auc_norm", "auc_macro", "eer")}}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from src.demo import Analyzer
-    state["analyzer"] = Analyzer(os.environ.get("VAD_MODEL") or CFG["model"], allow_missing=True)
-    info = state["analyzer"].info()
+    state["default"] = os.environ.get("VAD_MODEL") or CFG["model"] or "none"
+    info = analyzer(state["default"]).info()
     M.MODEL.info({k: str(v) for k, v in info.items() if k != "warning"})
     if info["threshold"] is not None:
         M.THRESHOLD.set(info["threshold"])
@@ -69,7 +103,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DSP391m video anomaly detection", version="2.0", lifespan=lifespan)
+app = FastAPI(title="DSP391m video anomaly detection", version="3.0", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -90,14 +124,31 @@ async def count_requests(request: Request, call_next):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", **state["analyzer"].info()}
+    return {"status": "ok", **analyzer(state["default"]).info()}
+
+
+@app.get("/models")
+def models():
+    return {"default": state["default"], "models": [model_card(n) for n in (*MODELS, "none")]}
+
+
+def clean_old_jobs():
+    """Keep the newest api.keep_jobs result folders, so the disk does not fill up."""
+    jobs = sorted((d for d in WORK.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime)
+    for d in jobs[:max(len(jobs) - CFG.get("keep_jobs", 50), 0)]:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 @app.post("/analyze")
-def analyze(file: UploadFile = File(...), render: bool = True):
+def analyze(file: UploadFile = File(...), model: str | None = None, render: bool = True):
+    model = model or state["default"]
+    if model not in (*MODELS, "none"):
+        raise HTTPException(400, f"unknown model {model!r}; one of {[*MODELS, 'none']}")
     ext = Path(file.filename or "").suffix.lower()
     if ext not in VIDEO_EXTS:
         raise HTTPException(400, f"unsupported file type {ext!r}; send one of {sorted(VIDEO_EXTS)}")
+    WORK.mkdir(parents=True, exist_ok=True)
+    clean_old_jobs()
     job = uuid.uuid4().hex[:12]
     work = WORK / job
     work.mkdir(parents=True)
@@ -109,11 +160,12 @@ def analyze(file: UploadFile = File(...), render: bool = True):
         raise HTTPException(413, f"file larger than {CFG['max_upload_mb']} MB")
     try:
         with lock:
-            r = state["analyzer"].run(src, work, draw=render)
+            r = analyzer(model).run(src, work, draw=render)
     except Exception as e:
         raise HTTPException(422, f"could not analyze the video: {e}")
     finally:
         shutil.rmtree(work / "frames", ignore_errors=True)            # keep only the results
+        src.unlink(missing_ok=True)
 
     model = r["model"]
     for step, sec in r["timings"].items():

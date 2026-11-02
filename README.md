@@ -5,6 +5,31 @@ crowd** (counter-flow) or **much faster** than it, and anything else the models 
 Data: ShanghaiTech Campus (official split: 330 normal training videos, 107 test videos with frame
 labels) + our own phone videos. Four models are trained and compared on the same test set.
 
+## Use it: upload a video, see who is abnormal
+
+```bash
+docker compose up --build -d          # (GPU: add  -f docker-compose.yml -f docker-compose.gpu.yml)
+```
+Open **http://localhost:7860**, upload a video, choose a model, press **Analyze**. You get the video
+back with a box and a direction arrow on every person, red / yellow boxes on the people who move
+against the crowd, run or loiter, the anomaly score over time, and tables of who did what and when.
+The page uses the FastAPI service (http://localhost:8000/docs), which anyone can also call directly;
+Grafana (http://localhost:3000) monitors both. The trained models must be in `outputs/` first
+(`bash run_all.sh` or `dvc pull`). Details: [docs/mlops.md](docs/mlops.md).
+
+## Results (107 test videos)
+
+| # | Model | Parameters | AUC micro | AUC per-video | AUC macro | EER | Frames/s |
+|---|---|---|---|---|---|---|---|
+| 1 | ASTT, the thesis model (2 epochs) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 |
+| 2 | ASTT improved (ours, 4 epochs) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** |
+| 3 | MULDE, CVPR 2024 | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 |
+| 4 | MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 |
+| - | behavior rules (no training) | 0 | 59.9% | - | - | 40.1% | - |
+
+Speed: RTX 4050 Laptop (`python -m src.evaluate --benchmark`). What the numbers mean and why:
+[docs/models.md](docs/models.md#results-v42-107-shanghaitech-test-videos-40791-frames-17326-abnormal).
+
 ## Run everything with one command
 
 ```bash
@@ -49,13 +74,13 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
 | 4 | Pretrained weights into `weights/` (2 GB) | minutes |
 | 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
-| 6 | Behavior rules, then train + evaluate model 1, 2, 3, 4, saving version v1.0 ... v4.0 after each (`--smoke`: tiny runs) | models 1, 2: about a day each; 3, 4: a few hours each |
+| 6 | Behavior rules, then train + evaluate the models, saving a version after each (`--smoke`: tiny runs) | model 1: 2 epochs x 15-25 h; model 2: ~1 day (or Kaggle); 3, 4: ~4 h each + 1-3 h test |
 | 7 | Print the comparison table, the speed benchmark and the list of versions | - |
 
 ### Results
 | File | Content |
 |---|---|
-| `outputs/comparison/comparison.md` | **the main table**: AUC (micro / per-video / macro), EER, parameters, speed of every model |
+| `outputs/comparison/comparison.md` | **the main table**: AUC (micro / per-video / macro), EER, parameters of every model (use the benchmark for speed) |
 | `outputs/comparison/roc.png` | ROC curves of all models |
 | `outputs/comparison/benchmark.md` | parameters, ms per frame (per step), frames/s, GPU memory |
 | `outputs/evaluation/<model>/metrics.json` | the numbers of one model |
@@ -91,10 +116,11 @@ src/                 ALL code, one file per step
   train.py       3  train any model (the config decides which)
   evaluate.py    4  AUC / EER of one model, comparison table, size + speed benchmark
   behavior.py    5  people tracking, loitering, counter-flow
-  demo.py        6  one video in -> annotated video + JSON out
+  demo.py        6  one video in -> annotated video + JSON out (used by the API)
   utils.py          settings, paths, reading frames
   release.py        versions v1.0, v1.1, v2.0 ... with metadata (what changed)
 api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
+ui/app.py         the web page (Gradio), a client of the API     Dockerfile(.ui), docker-compose.yml
 tests/            pytest                                          docs/        notes for the report
 third_party/      the thesis code (downloaded at a fixed version, never edited)
 dvc.yaml          the pipeline run_all.sh uses (dvc dag draws it)
@@ -127,18 +153,20 @@ python -m src.release --list                       # all versions (also in relea
 python -m src.release --diff v1.0 v2.1             # what changed, in words
 git checkout v1.0 && dvc pull                      # exactly that version back
 ```
-`run_all.sh` saves one after each model (v1.0 = model 1 ... v4.0 = all four). Details:
+`run_all.sh` saves one after each model. Our versions so far: v2.0 (models 1 + 3), v4.0 (+ models 2, 4),
+v4.1 (model 2 evaluated), v4.2 (model 1 evaluated: all four results). Details:
 [docs/versioning.md](docs/versioning.md).
 
 ## MLOps
 DVC (data, models, pipeline, versions v1-v4 with metadata cards: [docs/versioning.md](docs/versioning.md)),
-FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), Docker + Prometheus + Grafana
-(`docker compose up --build -d` -> Grafana http://localhost:3000). Details: [docs/mlops.md](docs/mlops.md).
+FastAPI (`uvicorn api.main:app` -> http://localhost:8000/docs), web page (Gradio, :7860), Docker +
+Prometheus + Grafana (`docker compose up --build -d` -> Grafana http://localhost:3000). Details: [docs/mlops.md](docs/mlops.md).
 
 ## Where is ...? (for questions in the defence)
 | Question | Answer |
 |---|---|
 | How do I run everything? | `bash run_all.sh` |
+| How does a user try it? | `docker compose up --build -d`, then http://localhost:7860 |
 | Where is the thesis model? Is it really unchanged? | `src/models/astt.py` (ASTTThesis) on top of `third_party/ASTT`; `python third_party/fetch.py --check` proves the repo files are unedited; `tests/test_models.py` checks 150,579,876 parameters |
 | Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
 | What did you improve? | `configs/astt_improved.yaml`, `configs/mulde_improved.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |

@@ -33,6 +33,10 @@ def test_api(tmp_path, monkeypatch):
         assert j["frames"] == 20 and j["frame_scores"] is None
         assert c.get(j["result_video"]).status_code == 200
         assert c.post("/analyze", files={"file": ("a.txt", b"x", "text/plain")}).status_code == 400
+        assert c.post("/analyze?model=yolo", files={"file": ("clip.mp4", b"x", "video/mp4")}).status_code == 400
+        ms = c.get("/models").json()
+        assert ms["default"] == "none" and [m["name"] for m in ms["models"]][-1] == "none"
+        assert j["people"] == [] and j["events"] == []
         assert 'vad_videos_analyzed_total{model="none"} 1.0' in c.get("/metrics").text
 
 
@@ -47,3 +51,15 @@ def test_api_model_not_trained_yet(tmp_path, monkeypatch):
     with TestClient(m.app) as c:
         h = c.get("/health").json()
         assert h["status"] == "ok" and h["model"] == "none" and "astt_improved is not ready" in h["warning"]
+
+
+def test_people_summary():
+    """Main walking direction per person, and which behaviors were flagged for them."""
+    from src.demo import people_summary
+    tracks = np.array([[t, 1, 0, 0, 10, 10, 1] for t in range(10)] + [[t, 2, 0, 0, 10, 10, 1] for t in range(10)], np.float32)
+    vel = np.array([[3, 0]] * 10 + [[0, 0]] * 10, np.float32)                 # #1 walks right, #2 stands
+    moving = np.array([True] * 10 + [False] * 10)
+    flags = np.array([0] * 10 + [1] * 10)                                      # #2 loiters
+    p = people_summary(tracks, vel, moving, flags, fps=5)
+    assert [(x["track_id"], x["direction"], x["events"]) for x in p] == [(1, "right", []), (2, "standing", ["LOITERING"])]
+    assert p[0]["to_s"] == 1.8

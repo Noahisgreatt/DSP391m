@@ -6,12 +6,14 @@
 
 Steps: 1 cut into frames  2 find + track people  3 behavior rules (loitering / counter-flow /
 too fast)  4 model score per frame vs. the EER threshold from evaluation  5 draw.
-Out: outputs/demo/<video>/result.mp4 + result.json
+Out: outputs/demo/<video>/result.mp4 (H.264, plays in a browser) + result.json
 """
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -19,12 +21,21 @@ import cv2
 import numpy as np
 import torch
 
-from src.behavior import COUNTER, DIRECTIONS, EVENTS, FAST, LOITER, PeopleTracker, angle_to_bin, detect_events, summarize
+from src.behavior import (COUNTER, DIRECTIONS, EVENTS, FAST, LOITER, PeopleTracker, angle_to_bin, detect_events,
+                          per_person, summarize)
 from src.data import extract_video
 from src.utils import list_frames, load_config, out_dir, read_frame
 
 RED, YELLOW, WHITE = (0, 0, 255), (0, 200, 255), (255, 255, 255)
 TAGS = ((COUNTER, "COUNTER-FLOW", RED), (FAST, "TOO FAST", RED), (LOITER, "LOITERING", YELLOW))
+_TRACKERS: dict = {}                                     # one people tracker per device, shared by all models
+
+
+def tracker(cfg, device):
+    key = (PeopleTracker, str(device))
+    if key not in _TRACKERS:
+        _TRACKERS[key] = PeopleTracker(cfg, device)
+    return _TRACKERS[key]
 
 
 class Analyzer:
@@ -37,7 +48,7 @@ class Analyzer:
         self.name = None if (model or api["model"]) in (None, "none") else (model or api["model"])
         self.behavior = load_config("configs/behavior.yaml")
         self.device = torch.device(device or api["device"] or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.people = PeopleTracker(self.behavior, self.device)
+        self.people = tracker(self.behavior, self.device)
         self.scorer = self.cfg = self.threshold = self.warning = None
         if self.name:
             cfg = load_config(f"configs/{self.name}.yaml")
@@ -101,10 +112,49 @@ class Analyzer:
                   "abnormal_ratio": round(len(abnormal) / max(len(frames), 1), 4),
                   "frame_scores": None if scores is None else [None if np.isnan(s) else round(float(s), 6) for s in scores],
                   "people_tracked": int(len(np.unique(tracks[:, 1]))) if len(tracks) else 0,
+                  "people": people_summary(tracks, vel, moving, flags, fps),
                   "events": events, "event_counts": {n: sum(e["event"] == n for e in events) for n, _ in EVENTS.values()},
                   "result_video": result_video, "timings": tm}
         (work / "result.json").write_text(json.dumps(result, indent=2))
         return result
+
+
+def people_summary(tracks, vel, moving, flags, fps):
+    """One line per tracked person: when seen, main walking direction, behaviors found."""
+    out = []
+    for tid, idx in per_person(tracks):
+        mv = moving[idx].astype(bool)
+        if mv.any():
+            v = vel[idx][mv]
+            bins = angle_to_bin(np.arctan2(v[:, 1], v[:, 0]) % (2 * np.pi), 8)
+            direction = DIRECTIONS[int(np.bincount(bins, minlength=8).argmax())]
+        else:
+            direction = "standing"
+        fr = tracks[idx, 0]
+        out.append({"track_id": int(tid), "from_s": round(float(fr.min()) / fps, 2), "to_s": round(float(fr.max()) / fps, 2),
+                    "direction": direction, "moving_share": round(float(mv.mean()), 2),
+                    "events": [name for bit, (name, _) in EVENTS.items() if (flags[idx].astype(int) & bit).any()]})
+    return out
+
+
+def browser_mp4(path):
+    """OpenCV writes MPEG-4 part 2, which browsers do not play: re-encode as H.264 when ffmpeg exists."""
+    exe = shutil.which("ffmpeg")
+    if exe is None:
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            return path
+    tmp = Path(path).with_suffix(".h264.mp4")
+    r = subprocess.run([exe, "-y", "-loglevel", "error", "-i", str(path), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)],
+                       capture_output=True)
+    if r.returncode == 0:
+        tmp.replace(path)
+    else:
+        tmp.unlink(missing_ok=True)
+    return path
 
 
 # ====================================================================== drawing
@@ -175,7 +225,7 @@ def render(out_path, frame_paths, size, fps, tracks, vel, moving, flags, scores=
             cv2.putText(img, name, (22, 16 + i * 16), cv2.FONT_HERSHEY_SIMPLEX, 0.4, WHITE, 1)
         writer.write(img)
     writer.release()
-    return out_path
+    return browser_mp4(out_path)
 
 
 def main():

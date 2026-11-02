@@ -85,7 +85,7 @@ fi
 dvc repro behavior@shanghaitech                   # the rules need no training
 if [[ $MANUAL == yes ]]; then dvc repro behavior@manual; fi
 for m in "${MODELS[@]}"; do                       # model by model; a version after each:
-    dvc repro "evaluate@$m"                       # v1.0 = model 1, v2.0 = + model 2, ... (docs/versioning.md)
+    dvc repro "evaluate@$m"                       # a new model = next major version (docs/versioning.md)
     python -m src.release --note "$m trained + evaluated" || true    # "nothing changed" = no new version
 done
 step "7/7 Results"

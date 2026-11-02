@@ -1,4 +1,10 @@
-# MLOps: DVC, FastAPI, Docker, Prometheus, Grafana
+# MLOps: DVC, FastAPI, web page, Docker, Prometheus, Grafana
+
+```
+ browser ──> web page (Gradio, :7860) ──HTTP──> FastAPI (:8000) ──> src/demo.py: tracking + rules + model
+                                                     │ /metrics
+                                         Prometheus (:9090) ──> Grafana (:3000)
+```
 
 ## DVC
 - **Remote**: Google Drive (`gdrive_remote` in `.dvc/config`). The OAuth client id/secret live
@@ -22,22 +28,33 @@
 `uvicorn api.main:app --port 8000`, then http://localhost:8000/docs
 | Endpoint | |
 |---|---|
-| `GET /health` | status + which model, device, threshold |
-| `POST /analyze` | upload a video -> per-frame scores, abnormal frames, unusual objects (models 3/4), LOITERING / COUNTER_FLOW / TOO_FAST events, link to the result video |
-| `GET /results/{job}/video` | the annotated video |
+| `GET /health` | status + default model, device, threshold |
+| `GET /models` | the four models: ready or not, parameters, test AUC / EER (the web page's model list) |
+| `POST /analyze?model=...` | upload a video -> every person (time seen, main walking direction), LOITERING / COUNTER_FLOW / TOO_FAST events (who, when, why), per-frame scores, abnormal frames, link to the result video |
+| `GET /results/{job}/video` | the annotated video (H.264, plays in a browser) |
 | `GET /metrics` | Prometheus metrics |
-Served model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|mulde|mulde_improved|none`.
-If that model isn't trained + evaluated yet, the API still starts with the behavior rules only and
-`/health` says why (`warning`); after training: `docker compose restart api`.
+Default model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|mulde|mulde_improved|none`;
+`?model=` picks another one per request (loaded on first use, at most `max_models_loaded` kept in
+GPU memory). A model that isn't trained + evaluated yet serves the behavior rules only, with a
+`warning`. Only the newest `keep_jobs` results are kept on disk.
+
+## Web page (`ui/app.py`, Gradio)
+http://localhost:7860: upload a video, pick a model (with its test AUC), press **Analyze**. Shows the
+result video, "N of M people behave abnormally" with who / what / when, a table of every person and
+their main direction, the anomaly score over time, and the raw JSON to download. It is only a
+client of the API (no PyTorch in its container), so the same API serves the page, scripts and Grafana.
+Without Docker: `pip install -r requirements-ui.txt && python -m ui.app` (API_URL, default :8000).
 
 ## Docker
-`docker compose up --build -d` starts 3 containers: `api` (FastAPI, model weights mounted from
-`outputs/`), `prometheus`, `grafana`. GPU: add `-f docker-compose.gpu.yml`.
+`docker compose up --build -d` starts 4 containers: `ui` (web page), `api` (FastAPI, model weights
+mounted from `outputs/`), `prometheus`, `grafana`. GPU: add `-f docker-compose.gpu.yml`.
+The models must be trained (or `dvc pull`ed) first, so that `outputs/training/<model>/model.pth`
+and `outputs/evaluation/<model>/metrics.json` exist.
 
 ## Monitoring (Prometheus + Grafana)
 Grafana http://localhost:3000 (admin/admin), dashboard **DSP391m - Video anomaly detection**:
 - **Serving**: requests/s, latency p50/p95, error rate, time per pipeline step (frames, tracking,
-  model, render), frames/s, behavior events per type, unusual objects per attribute (models 3/4),
+  model, render), frames/s, behavior events per type,
   **frame-score distribution vs. the threshold and share of abnormal frames: if these drift
   upwards, incoming videos no longer look like the training data (data drift)**.
 - **Training (live)**: `src/train.py` serves its metrics on port 8001 while it runs: loss, learning

@@ -5,6 +5,8 @@ api:
   threshold: null                   # null = EER threshold from outputs/evaluation/<model>/metrics.json
   device: null                      # null = GPU if available
   max_upload_mb: 500
+  max_models_loaded: 2              # ?model= loads others on demand; at most this many kept on the GPU
+  keep_jobs: 50                     # result folders kept in work_dir (older ones deleted)
   work_dir: outputs/api             # uploaded videos, frames and result videos
 
 monitoring:

@@ -1,0 +1,4 @@
+# The web page (ui/app.py): a client of the API, so it needs no PyTorch.
+gradio==5.50.0
+requests>=2.31
+pandas>=2.0
