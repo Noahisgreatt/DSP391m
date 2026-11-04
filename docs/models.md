@@ -16,7 +16,7 @@ detectron2 / hiera blocked.
 
 | Model | What | Parameters | Training budget |
 |---|---|---|---|
-| 1 `astt_baseline` | thesis ASTT, unchanged except 2 epochs | 150,579,876 | 2 epochs (thesis: 5), laptop |
+| 1 `astt_baseline` | thesis ASTT, unchanged except 4 epochs | 150,579,876 | 4 epochs (thesis: 5), laptop; v4.2 results below are after 2 |
 | 2 `astt_improved` | our ASTT | 100,379,299 | 4 epochs (planned 2), Kaggle T4 |
 | 3 `mulde` | MULDE (CVPR 2024) on Hiera-B | 70,724,289 | features + 20,000 density steps (226 min), laptop |
 | 4 `mulde_improved` | our MULDE | 58,133,185 | features + 20,000 density steps (188 min), laptop |
@@ -72,10 +72,11 @@ cross-attention that `model_ste_tte.py` has commented out, exactly as `model_bas
 applies it. Verified: same weights give the same output as the previous version of our code
 (difference 0.0). The repo builds its ViT with `timm.create_model`; we pass it our own ViT
 (same layers, same parameter names) instead, without editing the repo file. Training = the repo's: BGR in [-1, 1], frames newest-first, SGD 1e-4
-momentum 0.9, OneCycleLR (500 warm-up), batch 8, fp32. **One change: 2 epochs instead of 5** (our
-time limit: one epoch takes 15-25 h on the laptop GPU). Model 2 was planned with the same 2
-epochs but its Kaggle runs trained 4 before the change reached them, so model 2 had twice the
-training budget: keep this in mind when comparing models 1 and 2. Procedure-only additions: `train_steps: auto`, checkpoints every 20 min +
+momentum 0.9, OneCycleLR (500 warm-up), batch 8, fp32. **One change: 4 epochs instead of 5** (our
+time limit: one epoch takes 15-25 h on the laptop GPU). It was first trained 2 epochs (results v4.2);
+model 2 trained 4 on Kaggle, so model 1 was continued to 4 for a fair comparison. Continuing
+stretches the learning-rate schedule to 4 epochs from where it was (a warm restart at the point a
+4-epoch schedule would be after 2 epochs). Procedure-only additions: `train_steps: auto`, checkpoints every 20 min +
 automatic resume.
 
 ## Model 2: ASTT improved (ours), 100,379,299 parameters
