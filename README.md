@@ -137,6 +137,8 @@ python -m src.train    --config configs/astt_baseline.yaml   # train one model (
 python -m src.evaluate --config configs/astt_baseline.yaml   # AUC / EER on the 107 test videos
 python -m src.evaluate --compare                             # table of all evaluated models
 python -m src.evaluate --benchmark                           # size and speed of every model
+python -m src.verify                                         # recompute every AUC / EER independently (check the numbers)
+python -m src.verify                                         # recompute every AUC / EER independently (check the numbers)
 python -m src.behavior --dataset shanghaitech                # loitering / counter-flow rules
 python -m src.demo --video clip.mp4 --model mulde_improved   # one video -> outputs/demo/clip/
 python -m src.release --note "what changed"                  # save a new version (v1.0, v1.1, v2.0 ...)
@@ -173,7 +175,7 @@ Prometheus + Grafana (`docker compose up --build -d` -> Grafana http://localhost
 | Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
 | What did you improve? | `configs/astt_improved.yaml`, `configs/mulde_improved.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |
 | How are loitering / counter-flow decided? | `src/behavior.py` (functions `loitering`, `counter_flow`); thresholds in `configs/behavior.yaml` |
-| How is accuracy measured? | `src/evaluate.py` (one metric code for all models) |
+| How is accuracy measured? | `src/evaluate.py` (one metric code for all models); `python -m src.verify` recomputes it independently from the saved per-frame scores and the dataset's own labels |
 | Which videos are train / test? | `data/metadata/split.json`, made by `src/data.py` |
 | What changed between two versions? | `python -m src.release --diff v1.0 v2.0` (or `dvc metrics diff v1.0 v2.0`) |
 | How do I get exactly version 1 back? | `git checkout v1.0 && dvc pull` |
