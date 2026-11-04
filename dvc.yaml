@@ -92,7 +92,6 @@ stages:
       - outputs/evaluation/astt_improved/metrics.json
       - outputs/evaluation/mulde/metrics.json
       - outputs/evaluation/mulde_improved/metrics.json
-      - outputs/behavior/shanghaitech/metrics.json
       - src/evaluate.py
     outs:
       - outputs/comparison/comparison.md: {cache: false}

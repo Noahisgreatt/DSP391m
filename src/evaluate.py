@@ -1,7 +1,7 @@
 """Step 4, EVALUATION: how good is each model, measured the same way for all of them.
 
     python -m src.evaluate --config configs/astt_baseline.yaml     # one model on the 107 test videos
-    python -m src.evaluate --compare                               # all evaluated models + the rules
+    python -m src.evaluate --compare                               # all evaluated models side by side
     python -m src.evaluate --benchmark                             # size and speed of every model
     (--smoke after a smoke training run, --limit N for only N test videos)
 
@@ -80,7 +80,7 @@ def frame_metrics(scores, labels, kind="mse"):
 
 
 def binary_metrics(y, flags):
-    """For yes/no detectors (the behavior rules): one operating point."""
+    """For yes/no detectors (the behavior rules, outputs/behavior/<dataset>/metrics.json): one operating point."""
     tpr = float((flags & (y == 1)).sum() / max((y == 1).sum(), 1))
     fpr = float((flags & (y == 0)).sum() / max((y == 0).sum(), 1))
     out = {"frames": int(len(y)), "abnormal_frames": int(y.sum()), "tpr": tpr, "fpr": fpr, "eer": (fpr + 1 - tpr) / 2}
@@ -131,10 +131,7 @@ def compare():
               for m in MODELS if (root / "evaluation" / m / "scores").exists()}
     if not scores:
         raise SystemExit("No evaluated model yet: run python -m src.evaluate --config ... first.")
-    ev = root / "behavior" / "shanghaitech" / "events"
-    rules = {f.stem: np.load(f)["frame_flags"] for f in sorted(ev.glob("*.npz"))} if ev.exists() else {}
-    common = set.intersection(*(set(s) for s in scores.values()))
-    common = sorted(common & set(rules)) if rules else sorted(common)
+    common = sorted(set.intersection(*(set(s) for s in scores.values())))
     first = next(iter(scores.values()))
     y = np.concatenate([first[v]["labels"] for v in common])
     rows, curves = [], []
@@ -147,14 +144,6 @@ def compare():
                      "auc_macro": macro_auc([(s[v]["score"], s[v]["labels"]) for v in common]), "eer": eer_point(y, norm)[0],
                      "fps_scored": json.loads(ev_m.read_text()).get("fps_scored") if ev_m.exists() else None})
         curves.append((MODELS[name], *roc_curve(y, raw)[:2], rows[-1]["auc_raw"]))
-    point = None
-    if rules:
-        b = np.concatenate([np.pad(rules[v], (0, max(0, len(first[v]["labels"]) - len(rules[v]))))[:len(first[v]["labels"])] > 0
-                            for v in common])
-        m = binary_metrics(y, b)
-        rows.append({"key": "rules", "method": "Behavior rules (no training)", "parameters_M": 0, "auc_raw": m.get("auc"),
-                     "auc_norm": m.get("auc"), "auc_macro": None, "eer": m["eer"], "fps_scored": None})
-        point = (m["fpr"], m["tpr"], m.get("auc"))
     out = root / "comparison"
     out.mkdir(parents=True, exist_ok=True)
     (out / "comparison.json").write_text(json.dumps({"test_videos": len(common), "frames": int(len(y)),
@@ -162,7 +151,7 @@ def compare():
     pct = lambda v: "-" if v is None else f"{v * 100:.1f}%"
     md = [f"# Comparison on {len(common)} test videos, {len(y):,} frames ({int(y.sum()):,} abnormal)", "",
           "| Method | Parameters | AUC micro | AUC per-video norm | AUC macro | EER | Frames/s |", "|---|---|---|---|---|---|---|"]
-    md += [f"| {r['method']} | {r['parameters_M']}M | {pct(r['auc_raw'])} | {pct(r['auc_norm'])} | {pct(r['auc_macro'])} | "
+    md += [f"| {r['method']} | {str(r['parameters_M']) + 'M' if r['parameters_M'] else '-'} | {pct(r['auc_raw'])} | {pct(r['auc_norm'])} | {pct(r['auc_macro'])} | "
            f"{pct(r['eer'])} | {r['fps_scored'] or '-'} |" for r in rows]
     (out / "comparison.md").write_text("\n".join(md) + "\n")
     import matplotlib
@@ -172,8 +161,6 @@ def compare():
     ax.plot([0, 1], [0, 1], color="#e4e3dd", lw=1, ls="--")
     for (name, fpr, tpr, auc), c in zip(curves, ["#2a78d6", "#eb6834", "#7a5cd6", "#d64f8c"]):
         ax.plot(fpr, tpr, color=c, lw=2, label=f"{name}  AUC {auc * 100:.1f}%")
-    if point:
-        ax.plot(point[0], point[1], "o", ms=9, color="#1baf7a", label=f"Behavior rules  AUC {point[2] * 100:.1f}%")
     ax.set_xlabel("False positive rate"); ax.set_ylabel("True positive rate")
     ax.set_title(f"Frame-level ROC, {len(common)} test videos", loc="left")
     ax.grid(color="#e4e3dd", lw=0.6); ax.legend(loc="lower right", frameon=False, fontsize=8)

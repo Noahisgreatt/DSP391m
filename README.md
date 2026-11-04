@@ -26,7 +26,6 @@ Grafana (http://localhost:3000) monitors both. The trained models must be in `ou
 | 2 | ASTT improved (ours, 4 epochs) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** |
 | 3 | MULDE, CVPR 2024 | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 |
 | 4 | MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 |
-| - | behavior rules (no training) | 0 | 59.9% | - | - | 40.1% | - |
 
 Speed: RTX 4050 Laptop (`python -m src.evaluate --benchmark`). What the numbers mean and why:
 [docs/models.md](docs/models.md#results-v42-107-shanghaitech-test-videos-40791-frames-17326-abnormal).
@@ -75,7 +74,7 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
 | 4 | Pretrained weights into `weights/` (2 GB) | minutes |
 | 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
-| 6 | Behavior rules, then train + evaluate the models, saving a version after each (`--smoke`: tiny runs) | model 1: 2 epochs x 15-25 h; model 2: ~1 day (or Kaggle); 3, 4: ~4 h each + 1-3 h test |
+| 6 | Behavior rules, then train + evaluate the models, saving a version after each (`--smoke`: tiny runs) | model 1: 4 epochs x 15-25 h; model 2: ~1 day (or Kaggle); 3, 4: ~4 h each + 1-3 h test |
 | 7 | Print the comparison table, the speed benchmark and the list of versions | - |
 
 ### Results
@@ -95,7 +94,7 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT = transfer learning, spatial tokens, residual prediction) | 100.4M |
 | 3 | `mulde` | MULDE (Micorek et al., CVPR 2024): Hiera-B video features + a density network | 70.7M |
 | 4 | `mulde_improved` | Our MULDE: two clip lengths, one model per camera, lighter density network | 58.1M |
-| - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 |
+| - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person, for the result video and web page (not a compared model) | 0 |
 
 **No model comes from a library call.** Every network (ViT, Hiera video transformer, Keypoint
 R-CNN) is PyTorch code in this project; only the pretrained *weights* are
