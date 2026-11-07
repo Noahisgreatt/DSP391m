@@ -29,19 +29,17 @@ LEGEND = """**How to read the result video**
 
 
 def models():
-    """Dropdown entries from GET /models: name, test AUC, or 'not trained yet'."""
+    """Dropdown entries from GET /models: the four models with their test AUC (or 'not trained yet').
+    The people boxes, directions and LOITERING / COUNTER-FLOW tags come with every model."""
     try:
         j = requests.get(f"{API}/models", timeout=10).json()
     except (requests.RequestException, ValueError):
-        return [("Behavior rules only (API not reachable yet)", "none")], "none"
-    out = []
-    for m in j["models"]:
-        label = m["title"]
-        if m["name"] != "none":
-            label += (f"  ·  {m['parameters'] / 1e6:.1f}M params  ·  test AUC {m['auc_macro'] * 100:.1f}%"
-                      if m["ready"] and m.get("auc_macro") is not None else "  ·  not trained yet")
-        out.append((label, m["name"]))
-    return out, j["default"]
+        return [("API not reachable yet: reload the page in a minute", "")], ""
+    out = [(m["title"] + (f"  ·  {m['parameters'] / 1e6:.1f}M params  ·  test AUC {m['auc_macro'] * 100:.1f}%"
+                          if m["ready"] and m.get("auc_macro") is not None else "  ·  not trained yet"), m["name"])
+           for m in j["models"] if m["name"] != "none"]
+    names = [v for _, v in out]
+    return out, j["default"] if j["default"] in names else (names[0] if names else "")
 
 
 def refresh():
@@ -98,7 +96,7 @@ def run(video, model, progress):
     progress(0.05, desc="Uploading and analyzing (people tracking, behavior rules, model)...")
     try:
         with open(video, "rb") as f:
-            res = requests.post(f"{API}/analyze", params={"model": model}, timeout=TIMEOUT,
+            res = requests.post(f"{API}/analyze", params={"model": model or None}, timeout=TIMEOUT,
                                 files={"file": (Path(video).name, f, "application/octet-stream")})
     except requests.RequestException as e:
         raise gr.Error(f"The API at {API} is not reachable: {e}")

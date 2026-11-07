@@ -75,7 +75,7 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 3 | Original code of the papers into `third_party/`, checked byte-for-byte | 1 min |
 | 4 | Pretrained weights into `weights/` (2 GB) | minutes |
 | 5 | Data: download, unpack, official split (437 videos -> 330 train / 107 test) | ~1 h the first time |
-| 6 | Behavior rules, then train + evaluate the models, saving a version after each (`--smoke`: tiny runs) | model 1: 2 epochs x 15-25 h; model 2: ~1 day (or Kaggle); 3, 4: ~4 h each + 1-3 h test |
+| 6 | Behavior rules, then train + evaluate the models, saving a version after each (`--smoke`: tiny runs) | model 1: 4 epochs x 15-25 h; model 2: ~1 day (or Kaggle); 3, 4: ~4 h each + 1-3 h test |
 | 7 | Print the comparison table, the speed benchmark and the list of versions | - |
 
 ### Results
