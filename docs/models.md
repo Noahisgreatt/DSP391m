@@ -29,6 +29,7 @@ detectron2 / hiera blocked.
 | 2 ASTT improved (ours) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** | 1365 MB |
 | 3 MULDE (Micorek et al.) | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 | 1846 MB |
 | 4 MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 | 1798 MB |
+| Behavior rules (no training) | 0 | 59.9% | - | - | 40.1% | - | - |
 
 \* `python -m src.evaluate --benchmark` (RTX 4050 Laptop, video 01_0014, everything computed from
 the frames). The "frames/s" in `metrics.json` is the whole test run and is not comparable: model 4
@@ -46,6 +47,8 @@ What the numbers say:
 - **Model 4 vs model 3: not better.** It is 18% smaller but loses 0.4 micro and 4.8 norm AUC and is
   2x slower (two Hiera passes per frame). The per-camera mixtures are fitted on ~1/13 of the
   training frames each, which probably makes them less reliable than one mixture on all of them.
+- **Behavior rules** (66 loitering, 202 counter-flow, 58 too-fast events on the test set) need no
+  training and are weak frame detectors (59.9%), but they are the only part that says WHO and WHY.
 
 ## Model 1: ASTT, the thesis model (unchanged)
 Tran Minh Tung's PhD thesis (Ch. 3) and IEEE TCSVT 34 (2024) 8292-8309; code
@@ -129,5 +132,4 @@ Each change can be switched off in the config, so its effect can be measured (ab
 Per tracked person (Keypoint R-CNN people boxes + our IoU tracker with Hungarian matching): LOITERING (stays within 1 body height for 10 s),
 COUNTER_FLOW (direction > 120 degrees from the nearby crowd, or from the camera's normal flow),
 TOO_FAST (> 2 body heights/s and > 2x the neighbours). Thresholds: `configs/behavior.yaml`.
-They give WHO and WHY in the result video and the web page, which the frame-level models can't;
-they are not one of the compared models (no row in the comparison table).
+They give the *reason* that the frame-level models can't, and are evaluated as a yes/no detector.
