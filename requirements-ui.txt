@@ -1,4 +1,5 @@
-# The web page (ui/app.py): a client of the API, so it needs no PyTorch.
+# The web page (app/gradio_app.py): a client of the API, so it needs no PyTorch.
 gradio==5.50.0
 requests>=2.31
+imageio-ffmpeg>=0.5     # ffmpeg for converting uploads when it is not installed
 pandas>=2.0

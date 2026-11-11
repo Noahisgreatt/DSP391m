@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -118,6 +120,34 @@ def run(video, model, progress):
     return (str(out_video) if out_video else None, summary(r), *tables(r), str(job / "result.json"))
 
 
+def ffmpeg():
+    """The ffmpeg program: installed (apt / the Docker image) or the one pip's imageio-ffmpeg ships."""
+    exe = shutil.which("ffmpeg")
+    if exe is None:
+        try:
+            import imageio_ffmpeg
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            return None
+    return exe
+
+
+def prepare_upload(video):
+    """Right after an upload: re-encode to H.264, at most 480 px high, 25 fps, no sound.
+    Phone videos are often HEVC, which most browsers cannot preview ("video not playable"); the
+    result also is 5-10x smaller to send to the API and close to the training videos (856x480, 24 fps).
+    Without ffmpeg the original is kept (the API reads it anyway)."""
+    exe = ffmpeg()
+    if not video or exe is None:
+        return video
+    out = OUT / "uploads" / f"{Path(video).stem}_480p.mp4"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run([exe, "-y", "-loglevel", "error", "-i", str(video), "-vf", "scale=-2:2*trunc(min(480\\,ih)/2),fps=25",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p", "-an",
+                        "-movflags", "+faststart", str(out)], capture_output=True)
+    return str(out) if r.returncode == 0 and out.exists() else video
+
+
 def build() -> gr.Blocks:
     choices, default = models()
     with gr.Blocks(title="DSP391m - Video anomaly detection") as page:
@@ -125,7 +155,8 @@ def build() -> gr.Blocks:
                     "walks, who is **loitering**, moving **against the crowd** or **running**, and when the scene is abnormal.")
         with gr.Row():
             with gr.Column(scale=2):
-                video_in = gr.Video(label="Your video (.mp4 / .avi / .mov)", sources=["upload"])  # sent as is: the API reads any format (no ffmpeg needed here)
+                video_in = gr.Video(label="Your video (.mp4 / .avi / .mov; converted to 480p H.264 on upload)",
+                                    sources=["upload"])
                 model = gr.Dropdown(choices, value=default, label="Model")
                 go = gr.Button("Analyze", variant="primary")
                 gr.Markdown(LEGEND)
@@ -141,6 +172,7 @@ def build() -> gr.Blocks:
                 curve = gr.LinePlot(x="time (s)", y="value", color="line", height=300)
             with gr.Tab("Raw result (JSON)"):
                 raw = gr.File(label="result.json")
+        video_in.upload(prepare_upload, video_in, video_in)               # playable preview, smaller upload to the API
         go.click(analyze, [video_in, model], [video_out, info, events, people, curve, raw])
         page.load(refresh, None, model)              # every page load asks the API again (it may have started later)
     return page
