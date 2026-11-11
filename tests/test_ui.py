@@ -37,7 +37,7 @@ def test_model_list_has_no_rules_only_entry(monkeypatch):
 
 
 def test_upload_is_converted_to_480p_h264(tmp_path):
-    """A phone-like video (HEVC, 1080p, 30 fps) becomes H.264, 480 px high, 25 fps: plays in a browser."""
+    """A phone-like video (HEVC, 1080p, 30 fps) becomes H.264, still 1080p, 25 fps: plays in a browser, stays sharp."""
     import shutil
     import subprocess
     from app.gradio_app import ffmpeg, prepare_upload
@@ -50,5 +50,5 @@ def test_upload_is_converted_to_480p_h264(tmp_path):
     out = prepare_upload(str(src))
     probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_name,height,r_frame_rate",
                             "-of", "csv=p=0", out], capture_output=True, text=True).stdout.strip()
-    assert out.endswith("_480p.mp4") and probe == "h264,480,25/1"
+    assert out.endswith("_h264.mp4") and probe == "h264,1080,25/1"
     assert prepare_upload(None) is None

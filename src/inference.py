@@ -155,7 +155,7 @@ def browser_mp4(path):
             return path
     tmp = Path(path).with_suffix(".h264.mp4")
     r = subprocess.run([exe, "-y", "-loglevel", "error", "-i", str(path), "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)],
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)],
                        capture_output=True)
     if r.returncode == 0:
         tmp.replace(path)
@@ -227,7 +227,7 @@ def region_masks(maps, thr):
 
 
 def render(out_path, frame_paths, size, fps, tracks, vel, moving, flags, scores=None, maps=None, thr=None,
-           model_name="", max_width=1280):
+           model_name="", max_width=1920):
     """Draw at the video's own resolution (at most max_width wide), not at the 640x360 the
     behavior steps work in, so the result is as sharp as the input."""
     fidx = tracks[:, 0].astype(int)
