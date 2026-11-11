@@ -1,6 +1,6 @@
-# The four models
+# The models
 
-All four answer the same question (how abnormal is each frame of a test video?) and are
+All of them answer the same question (how abnormal is each frame of a test video?) and are
 evaluated by the same code (`src/evaluate.py`) on the same 107 ShanghaiTech test videos.
 Parameter counts were measured by building each network.
 
@@ -11,7 +11,7 @@ the thesis's own code in `third_party/ASTT`. Only the *weights* are downloaded
 `torch.hub.load`, `YOLO(...)`, `clip.load` or torchvision's `*_resnet50_fpn()` are not used
 anywhere; torchvision is used only for basic operations (`nms`, `roi_align`). `tests/test_nets.py`
 checks that each network gives the same output as the official implementation with the same
-weights, and `tests/test_no_wrappers.py` builds all four models with timm / ultralytics / CLIP /
+weights, and `tests/test_no_wrappers.py` builds every model with timm / ultralytics / CLIP /
 detectron2 / hiera blocked.
 
 | Model | What | Parameters | Training budget |
@@ -20,6 +20,8 @@ detectron2 / hiera blocked.
 | 2 `astt_improved` | our ASTT | 100,379,299 | 4 epochs (planned 2), Kaggle T4 |
 | 3 `mulde` | MULDE (CVPR 2024) on Hiera-B | 70,724,289 | features + 20,000 density steps (226 min), laptop |
 | 4 `mulde_improved` | our MULDE | 58,133,185 | features + 20,000 density steps (188 min), laptop |
+| 5 `astt_lite` | model 2 with the first 7 of 12 ViT blocks | 64,939,939 | 4 epochs (= models 1, 2) |
+| 6 `astt_lite_smooth` | model 5 + Gaussian smoothing of the score | 64,939,939 (model 5's weights) | none: model 5's network |
 
 ## Results (v4.2: 107 ShanghaiTech test videos, 40,791 frames, 17,326 abnormal)
 
@@ -127,6 +129,32 @@ Same method (`configs/mulde_improved.yaml`, changes marked `[CHANGE]`):
 | Density network 2 x 2048 instead of 2 x 4096 | 7.3M instead of 19.9M parameters |
 
 Each change can be switched off in the config, so its effect can be measured (ablation).
+
+## Model 5: ASTT lite (ours), 64,939,939 parameters
+Goal: model 2's accuracy (or better) with 60-70M parameters, leaving room for people tracking
+across cameras and counting later. After model 2 the decoder is only 1.0M, so the backbone is the
+only place to save: 87.5M of model 2's 100.4M are the 12 blocks of the ViT (7.1M each).
+**One change from model 2 (`[CHANGE 5]` in `configs/astt_lite.yaml`): keep only the first 7 ViT
+blocks**, with their ImageNet weights (`ViT(depth=7).load_pretrained()` drops blocks 7-11).
+
+| | Model 2 | Model 5 |
+|---|---|---|
+| ViT-B/32 blocks | 12 (87.5M) | 7 (52.1M) |
+| Temporal transformer, cross-attention, decoder | 12.9M | 12.9M (same) |
+| Total | 100.4M | **64.9M (-35%)** |
+
+Why it can work: next-frame prediction needs WHERE things are and how they move, which the early
+blocks keep; the last blocks of an ImageNet ViT specialise in WHAT the image shows (class
+semantics), which predicting pixels hardly needs. Also ~35% less backbone compute.
+Everything else (training settings, 4 epochs) is model 2's, so the difference measures the depth.
+
+## Model 6: ASTT lite + Gaussian smoothing (ours), model 5's 64.9M parameters
+Model 5's trained network, unchanged (`weights_from: astt_lite`: nothing is trained), scored
+differently: **the per-frame error is smoothed over time with a Gaussian, sigma = 7 frames**
+(`[CHANGE 6]`, `scoring.smoothing_sigma`), as MULDE (models 3, 4) does. An anomaly (a runner, a
+bike, a fight) lasts many frames; a single badly predicted frame (a flicker, a compression
+artefact) is noise. Models 5 -> 6 therefore measure the effect of the smoothing alone.
+Used the same way in the API and the web page (choose model 6).
 
 ## Behavior rules (no training)
 Per tracked person (Keypoint R-CNN people boxes + our IoU tracker with Hungarian matching): LOITERING (stays within 1 body height for 10 s),

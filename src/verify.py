@@ -24,7 +24,7 @@ import numpy as np
 from scipy.stats import rankdata
 from sklearn.metrics import roc_auc_score, roc_curve
 
-MODELS = ("astt_baseline", "astt_improved", "mulde", "mulde_improved")
+from src.models import MODELS                                 # the one list of models (names only)
 LABELS = Path("data/processed/shanghaitech/labels")
 
 
@@ -89,7 +89,7 @@ def check(model):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", choices=MODELS, help="one model (default: all)")
+    ap.add_argument("--model", choices=list(MODELS), help="one model (default: all)")
     a = ap.parse_args()
     for m in [a.model] if a.model else MODELS:
         check(m)

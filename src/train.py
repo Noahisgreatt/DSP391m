@@ -1,7 +1,7 @@
 """Step 3, TRAINING. One command for every model; the config decides which.
 
     python -m src.train --config configs/astt_baseline.yaml           # model 1
-    python -m src.train --config configs/astt_improved.yaml           # model 2
+    python -m src.train --config configs/astt_improved.yaml           # model 2 (astt_lite = model 5)
     python -m src.train --config configs/mulde.yaml                   # model 3 (features + density fit)
     python -m src.train --config configs/mulde_improved.yaml          # model 4
     add --smoke for a 2-minute test run, --fresh to throw away an old run and start over
@@ -101,6 +101,9 @@ def settings_hash(cfg):
 
 
 def train_astt(cfg, args):
+    if cfg["model"].get("weights_from"):                       # model 6: model 5's weights, scored differently
+        return print(f"{cfg['model']['name']} uses the weights of {cfg['model']['weights_from']}: nothing to train "
+                     f"(train {cfg['model']['weights_from']} instead)")
     from src.models.astt import autocast, build, count_parameters, gradient_loss
     from src.models.nets import half_dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

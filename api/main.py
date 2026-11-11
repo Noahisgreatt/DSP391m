@@ -33,10 +33,10 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, In
 
 from src.utils import load_config
 
-MODELS = ("astt_baseline", "astt_improved", "mulde", "mulde_improved")
-NAMES = {"astt_baseline": "Model 1: ASTT (thesis)", "astt_improved": "Model 2: ASTT improved",
-         "mulde": "Model 3: MULDE (CVPR 2024)", "mulde_improved": "Model 4: MULDE improved",
-         "none": "Behavior rules only"}
+from src.models import MODELS as TITLES, trained_dir   # the one list of models
+
+MODELS = tuple(TITLES)
+NAMES = {**TITLES, "none": "Behavior rules only"}
 
 
 class M:
@@ -86,10 +86,10 @@ def model_card(name: str) -> dict:
     """Is this model ready to serve, and how good is it on the 107 ShanghaiTech test videos."""
     if name == "none":
         return {"name": name, "title": NAMES[name], "ready": True}
-    ev, tr = Path(f"outputs/evaluation/{name}/metrics.json"), Path(f"outputs/training/{name}/run.json")
+    ev, tr = Path(f"outputs/evaluation/{name}/metrics.json"), trained_dir(name) / "run.json"
     m = json.loads(ev.read_text()) if ev.exists() else {}
     params = (json.loads(tr.read_text()).get("parameters") or {}).get("Total") if tr.exists() else None
-    return {"name": name, "title": NAMES[name], "ready": Path(f"outputs/training/{name}/model.pth").exists() and bool(m),
+    return {"name": name, "title": NAMES[name], "ready": (trained_dir(name) / "model.pth").exists() and bool(m),
             "parameters": params, **{k: m.get(k) for k in ("auc_raw", "auc_norm", "auc_macro", "eer")}}
 
 

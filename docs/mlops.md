@@ -22,14 +22,14 @@
 - **Parameters**: every `configs/*.yaml` value a stage uses is declared under `params:`, so
   `dvc status` knows when a setting change makes a result out of date.
 - **Metrics / plots**: `dvc metrics show`, `dvc plots show` (ROC of every model).
-- **Model registry**: `artifacts:` in `dvc.yaml` describes the 4 models (path, type, labels).
+- **Model registry**: `artifacts:` in `dvc.yaml` describes the trained models (path, type, labels).
 
 ## FastAPI (`api/main.py`, uses `src/demo.py`)
 `uvicorn api.main:app --port 8000`, then http://localhost:8000/docs
 | Endpoint | |
 |---|---|
 | `GET /health` | status + default model, device, threshold |
-| `GET /models` | the four models: ready or not, parameters, test AUC / EER (the web page's model list) |
+| `GET /models` | every model: ready or not, parameters, test AUC / EER (the web page's model list) |
 | `POST /analyze?model=...` | upload a video -> every person (time seen, main walking direction), LOITERING / COUNTER_FLOW / TOO_FAST events (who, when, why), per-frame scores, abnormal frames, link to the result video |
 | `GET /results/{job}/video` | the annotated video (H.264, plays in a browser) |
 | `GET /metrics` | Prometheus metrics |

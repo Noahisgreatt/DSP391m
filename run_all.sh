@@ -5,7 +5,8 @@
 #   bash run_all.sh                      all 4 models (days on one GPU). Stopped? Run it again: it continues.
 #   bash run_all.sh mulde_improved       only some models (e.g. split the work over 2 computers)
 #   bash run_all.sh --smoke              quick check that every step works (tiny training runs)
-# Models: astt_baseline (1), astt_improved (2), mulde (3), mulde_improved (4).
+# Models: astt_baseline (1), astt_improved (2), mulde (3), mulde_improved (4), astt_lite (5),
+#         astt_lite_smooth (6 = model 5's weights + smoothing: list it after astt_lite).
 #
 # Needs: Linux or WSL2 Ubuntu, an NVIDIA GPU (>= 6 GB), ~100 GB free disk, conda or Python >= 3.10,
 # and the data: either access to our DVC remote, or a Kaggle API token (~/.kaggle/kaggle.json).
@@ -16,8 +17,8 @@ step() { printf '\n========== %s\n' "$*"; }
 die()  { printf '\nSTOPPED: %s\nFix that, then run the same command again (finished steps are skipped).\n' "$*" >&2; exit 1; }
 MODE=full; MODELS=()
 for a in "$@"; do if [[ $a == --smoke ]]; then MODE=smoke; else MODELS+=("$a"); fi; done
-[[ ${#MODELS[@]} -gt 0 ]] || MODELS=(astt_baseline astt_improved mulde mulde_improved)
-for m in "${MODELS[@]}"; do [[ -f configs/$m.yaml ]] || die "unknown model '$m' (astt_baseline astt_improved mulde mulde_improved)"; done
+[[ ${#MODELS[@]} -gt 0 ]] || MODELS=(astt_baseline astt_improved mulde mulde_improved astt_lite astt_lite_smooth)
+for m in "${MODELS[@]}"; do [[ -f configs/$m.yaml ]] || die "unknown model '$m' (astt_baseline astt_improved mulde mulde_improved astt_lite astt_lite_smooth)"; done
 echo "models: ${MODELS[*]}"
 
 step "1/7 Python environment"
@@ -89,8 +90,8 @@ for m in "${MODELS[@]}"; do                       # model by model; a version af
     python -m src.release --note "$m trained + evaluated" || true    # "nothing changed" = no new version
 done
 step "7/7 Results"
-if ls outputs/evaluation/{astt_baseline,astt_improved,mulde,mulde_improved}/metrics.json >/dev/null 2>&1; then
-    dvc repro compare benchmark                   # all four evaluated: the full comparison
+if ls outputs/evaluation/{astt_baseline,astt_improved,mulde,mulde_improved,astt_lite,astt_lite_smooth}/metrics.json >/dev/null 2>&1; then
+    dvc repro compare benchmark                   # all evaluated: the full comparison
     cat outputs/comparison/comparison.md outputs/comparison/benchmark.md
     git add dvc.lock outputs/comparison && git commit -qm "comparison + benchmark of all models" || true   # into git, for the report
 else

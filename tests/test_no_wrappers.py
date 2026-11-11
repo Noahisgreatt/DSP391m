@@ -14,7 +14,7 @@ sys.meta_path.insert(0, Block())
 import torch
 from src.models import astt, mulde
 from src.utils import load_config
-for n in ('astt_baseline', 'astt_improved'):
+for n in ('astt_baseline', 'astt_improved', 'astt_lite', 'astt_lite_smooth'):
     astt.build(load_config(f'configs/{n}.yaml'), pretrained=False)
 for n in ('mulde', 'mulde_improved'):
     mulde.Features(load_config(f'configs/{n}.yaml'), torch.device('cpu'), weights=False)

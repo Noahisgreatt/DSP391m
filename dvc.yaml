@@ -57,6 +57,7 @@ stages:
       astt_improved: {code: src/models/astt.py}
       mulde: {code: src/models/mulde.py}
       mulde_improved: {code: src/models/mulde.py}
+      astt_lite: {code: src/models/astt.py}                    # model 5 (model 6 uses its weights: no training)
     do:
       cmd: python -m src.train --config configs/${key}.yaml
       deps: [data/metadata/shanghaitech.json, data/metadata/split.json, "${item.code}", src/models/nets.py, src/train.py]
@@ -70,14 +71,18 @@ stages:
 
   # ------------------------------------------------------------------ 4. evaluation
   evaluate:
-    foreach:
-      astt_baseline: {code: src/models/astt.py}
-      astt_improved: {code: src/models/astt.py}
-      mulde: {code: src/models/mulde.py}
-      mulde_improved: {code: src/models/mulde.py}
+    foreach:                                                   # weights = whose trained model.pth it scores with
+      astt_baseline: {code: src/models/astt.py, weights: astt_baseline}
+      astt_improved: {code: src/models/astt.py, weights: astt_improved}
+      mulde: {code: src/models/mulde.py, weights: mulde}
+      mulde_improved: {code: src/models/mulde.py, weights: mulde_improved}
+      astt_lite: {code: src/models/astt.py, weights: astt_lite}
+      astt_lite_smooth: {code: src/models/astt.py, weights: astt_lite}   # model 6 = model 5 + smoothing
     do:
       cmd: python -m src.evaluate --config configs/${key}.yaml
-      deps: ["outputs/training/${key}/model.pth", data/metadata/split.json, "${item.code}", src/evaluate.py]
+      deps: ["outputs/training/${item.weights}/model.pth", data/metadata/split.json, "${item.code}", src/evaluate.py]
+      params:
+        - configs/${key}.yaml:
       outs:
         - outputs/evaluation/${key}/scores: {cache: false}
       metrics:
@@ -92,6 +97,8 @@ stages:
       - outputs/evaluation/astt_improved/metrics.json
       - outputs/evaluation/mulde/metrics.json
       - outputs/evaluation/mulde_improved/metrics.json
+      - outputs/evaluation/astt_lite/metrics.json
+      - outputs/evaluation/astt_lite_smooth/metrics.json
       - outputs/behavior/shanghaitech/metrics.json
       - src/evaluate.py
     outs:
@@ -107,6 +114,7 @@ stages:
       - outputs/training/astt_improved/model.pth
       - outputs/training/mulde/model.pth
       - outputs/training/mulde_improved/model.pth
+      - outputs/training/astt_lite/model.pth
       - src/evaluate.py
     outs:
       - outputs/comparison/benchmark.md: {cache: false}
@@ -121,6 +129,8 @@ plots:                                     # dvc plots show / dvc plots diff v1.
         outputs/evaluation/astt_improved/roc.csv: tpr
         outputs/evaluation/mulde/roc.csv: tpr
         outputs/evaluation/mulde_improved/roc.csv: tpr
+        outputs/evaluation/astt_lite/roc.csv: tpr
+        outputs/evaluation/astt_lite_smooth/roc.csv: tpr
 
 artifacts:                                 # model registry: what each trained model is
   astt-baseline:
@@ -143,3 +153,8 @@ artifacts:                                 # model registry: what each trained m
     type: model
     desc: "Model 4: MULDE improved (two clip lengths, per-camera mixtures, lighter density network), 58.1M"
     labels: [video-anomaly-detection, shanghaitech, density-estimation, lightweight]
+  astt-lite:
+    path: outputs/training/astt_lite/model.pth
+    type: model
+    desc: "Model 5: ASTT lite (model 2 with the first 7 of 12 ViT blocks), 64.9M; model 6 = these weights + Gaussian smoothing of the score"
+    labels: [video-anomaly-detection, shanghaitech, transfer-learning, lightweight]

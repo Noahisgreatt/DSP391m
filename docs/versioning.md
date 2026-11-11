@@ -28,7 +28,8 @@ The plan for this project:
 | **v3.0** | + **model 3** (MULDE, CVPR 2024) | how does a recent published method do? |
 | **v4.0** | + **model 4** (MULDE improved) + comparison + benchmark | can MULDE be lighter and more accurate? |
 | v4.1, v4.2 ... | any change after that (tuning, more data, bug fixes) | did the change help? |
-| v5.0 | TensorRT versions of models 2 and 4 | how much faster in deployment? |
+| v5.0 | + **model 5** (ASTT lite, 64.9M) and **model 6** (model 5 + smoothing) | same accuracy with 35% fewer parameters? what does smoothing add? |
+| v6.0 | TensorRT versions | how much faster in deployment? |
 
 What really happened (the models were trained on two computers, so two were added at once; the
 first version counts the models it already contains):

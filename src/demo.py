@@ -266,7 +266,7 @@ def render(out_path, frame_paths, size, fps, tracks, vel, moving, flags, scores=
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--video", required=True, help="video file or folder of frames")
-    ap.add_argument("--model", help="astt_baseline | astt_improved | mulde | mulde_improved | none")
+    ap.add_argument("--model", help="any name in src/models/__init__.py MODELS (e.g. astt_lite_smooth), or none")
     ap.add_argument("--threshold", type=float, help="frame threshold (default: EER from evaluation)")
     a = ap.parse_args()
     v = Path(a.video)

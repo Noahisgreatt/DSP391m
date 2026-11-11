@@ -1,0 +1,48 @@
+# Model 5: ASTT lite = model 2 with a shorter backbone: only the first 7 of the ViT's 12 blocks
+# (pretrained weights of those 7 kept), 100.4M -> ~65M parameters, ~35% less compute.
+# Everything else is model 2's (its own changes from model 1 stay marked [CHANGE]); the change
+# from model 2 is marked [CHANGE 5]. Explained in docs/models.md.
+#   python -m src.train    --config configs/astt_lite.yaml
+#   python -m src.evaluate --config configs/astt_lite.yaml
+
+model:
+  name: astt_lite
+  pretrained: true            # [CHANGE] transfer learning: ImageNet-21k/1k ViT-B/32-384 weights
+  vit_depth: 7                # [CHANGE 5] first 7 of 12 ViT blocks (early blocks keep more spatial detail)
+  image_size: 384
+  output_size: 256
+  num_frames: 4
+  emb_dim: 768
+  mlp_dim: 1536               # temporal transformer, same size as model 1
+  num_heads: 6
+  num_layers: 2
+  attn_dropout_rate: 0.0
+  dropout_rate: 0.1
+  decoder_channels: 256       # [CHANGE] decoder starts from the 12x12 patch-token map
+                              # instead of ONE 768-d vector (Linear 768 -> 256x16x16)
+  residual_last_frame: true   # [CHANGE] predict the change from the last input frame
+
+input:
+  loader: windows             # [CHANGE] windows never cross two videos (the repo's do)
+  color: rgb                  # [CHANGE] RGB, [-1, 1] = what the pretrained ViT expects
+  frame_order: oldest_first   # [CHANGE] natural time order
+
+train:
+  epochs: 4                   # = models 1 and 2
+  batch_size: 8
+  optimizer: adamw            # [CHANGE] AdamW
+  lr: 1.0e-4                  # new layers (temporal transformer, cross-attention, decoder)
+  backbone_lr: 1.0e-5         # [CHANGE] pretrained ViT is fine-tuned 10x slower
+  wd: 0.05
+  scheduler: cosine           # [CHANGE] linear warm-up then cosine decay
+  warmup_steps: 500
+  train_steps: auto
+  loss: mse+gradient          # [CHANGE] + gradient loss (sharper predictions; Liu et al. CVPR 2018)
+  gradient_loss_weight: 1.0
+  grad_clip: 1.0
+  amp: true                   # [CHANGE] bf16 mixed precision (~2x faster, less memory)
+  num_workers: 4
+  checkpoint_minutes: 20
+
+eval:
+  batch_size: 8

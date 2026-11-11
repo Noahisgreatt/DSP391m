@@ -3,6 +3,9 @@
 Kaggle gives a free GPU (T4 or P100, about 30 hours a week, 12 hours per run), and the ShanghaiTech
 data is already there, so nothing big has to be uploaded. `kaggle.sh` does everything on Kaggle.
 
+The steps below use model 2 (`astt_improved`); for model 5 replace every `astt_improved` with
+`astt_lite` (model 6 needs no training: it is scored with model 5's weights on the laptop).
+
 ## 1. Make the notebook (once)
 1. kaggle.com -> **Create -> New Notebook**. Your account must be phone-verified (Settings) to get a GPU and internet.
 2. Right panel, **Settings**: Accelerator = **GPU** (T4 x2 or P100), Internet = **On**.

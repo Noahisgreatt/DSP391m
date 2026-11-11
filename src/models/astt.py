@@ -1,9 +1,11 @@
-"""Models 1 and 2: ASTT, a transformer that PREDICTS the next frame from the 4 previous ones.
+"""Models 1, 2, 5, 6: ASTT, a transformer that PREDICTS the next frame from the 4 previous ones.
 Trained on normal videos only, so a frame it predicts badly (high error) is abnormal.
 
 Model 1  astt_baseline  the thesis model, UNCHANGED (Tran Minh Tung, IEEE TCSVT 2024; code
          third_party/ASTT @ 1d05305). 150,579,876 parameters.
 Model 2  astt_improved  our upgrade. 100,379,299 parameters.
+Model 5  astt_lite      model 2 with the first 7 of 12 ViT blocks. 64,939,939 parameters.
+Model 6  astt_lite_smooth  model 5's weights + Gaussian smoothing of the score (smooth()).
 
 Model 1, why a small adapter is needed: the repo never uploaded its final model.py. It has
   model_ste_tte.py      STE (ViT) + TTE + decoder, the cross-attention line commented out
@@ -69,9 +71,9 @@ class ASTTImproved(nn.Module):
       * output = last input frame + predicted change (motion is where anomalies are)"""
 
     def __init__(self, image_size=384, num_frames=4, emb_dim=768, mlp_dim=1536, num_heads=6, num_layers=2,
-                 dropout_rate=0.1, attn_dropout_rate=0.0, pretrained=True, residual_last_frame=True):
+                 dropout_rate=0.1, attn_dropout_rate=0.0, pretrained=True, residual_last_frame=True, vit_depth=12):
         super().__init__()
-        self.spatial_transformer = ViT(image_size)
+        self.spatial_transformer = ViT(image_size, depth=vit_depth)       # model 5: the first 7 of 12 blocks
         if pretrained:
             self.spatial_transformer.load_pretrained()
         self.grid, self.residual = image_size // 32, residual_last_frame
@@ -111,11 +113,12 @@ def build(cfg, pretrained=None):
                           dropout_rate=m["dropout_rate"], num_frames=m["num_frames"])
     return ASTTImproved(m["image_size"], m["num_frames"], m["emb_dim"], m["mlp_dim"], m["num_heads"], m["num_layers"],
                         m["dropout_rate"], m["attn_dropout_rate"], m["pretrained"] if pretrained is None else pretrained,
-                        m.get("residual_last_frame", True))
+                        m.get("residual_last_frame", True), m.get("vit_depth", 12))
 
 
 def count_parameters(model) -> dict:
-    out = {"STE (ViT-B/32-384)": n_params(model.spatial_transformer),
+    d = len(model.spatial_transformer.blocks) if hasattr(model.spatial_transformer, "blocks") else 12
+    out = {"STE (ViT-B/32-384)" + ("" if d == 12 else f", first {d} blocks"): n_params(model.spatial_transformer),
            "TTE (+ temporal CLS)": n_params(model.temporal_transformer) + model.cls_token.numel(),
            "Cross-attention": n_params(model.cross_att)}
     if isinstance(model, ASTTThesis):
@@ -174,16 +177,29 @@ def score_video(model, cfg, video_dir, device, maps=False, num_workers=None):
     return (mse, emaps) if maps else mse
 
 
+def smooth(mse, sigma):
+    """Model 6: Gaussian smoothing of the score over time (as MULDE does). An anomaly lasts many frames,
+    a single badly predicted frame is noise. The first frames (no prediction, NaN) stay NaN."""
+    if not sigma:
+        return mse
+    from scipy.ndimage import gaussian_filter1d
+    out, ok = mse.copy(), ~np.isnan(mse)
+    if ok.any():
+        out[ok] = gaussian_filter1d(mse[ok].astype(np.float64), sigma, mode="nearest")
+    return out
+
+
 class Scorer:
-    """Score one video with a trained model 1 / 2 (used by evaluate, demo, API)."""
+    """Score one video with a trained model 1 / 2 / 5 / 6 (used by evaluate, demo, API)."""
     kind = "mse"
 
     def __init__(self, cfg, checkpoint, device, **_):
         self.cfg, self.device = cfg, device
+        self.sigma = (cfg.get("scoring") or {}).get("smoothing_sigma")
         self.model = load_trained(cfg, checkpoint, device)
 
     def __call__(self, video_dir, vid=None, details=False, num_workers=None, **_):
         if details:
             mse, emaps = score_video(self.model, self.cfg, video_dir, self.device, True, num_workers)
-            return mse, {"maps": emaps}
-        return score_video(self.model, self.cfg, video_dir, self.device, False, num_workers)
+            return smooth(mse, self.sigma), {"maps": emaps}
+        return smooth(score_video(self.model, self.cfg, video_dir, self.device, False, num_workers), self.sigma)

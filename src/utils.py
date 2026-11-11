@@ -62,7 +62,10 @@ def features_path(cfg, kind, dataset, video):  # data/features/<kind>/<dataset>/
 
 
 def out_dir(cfg, stage, smoke=False):         # outputs/<training|evaluation>/<model>[_smoke]
-    return Path(cfg["paths"]["outputs"]) / stage / (cfg["model"]["name"] + ("_smoke" if smoke else ""))
+    name = cfg["model"]["name"]
+    if stage == "training":                    # a model that reuses another's weights (model 6 = model 5's)
+        name = cfg["model"].get("weights_from") or name
+    return Path(cfg["paths"]["outputs"]) / stage / (name + ("_smoke" if smoke else ""))
 
 
 def video_fps(cfg, dataset, video) -> float:

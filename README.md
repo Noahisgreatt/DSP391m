@@ -37,7 +37,7 @@ Speed: RTX 4050 Laptop (`python -m src.evaluate --benchmark`). What the numbers 
 git clone https://github.com/Noahisgreatt/DSP391m.git
 cd DSP391m
 bash run_all.sh --smoke     # first: quick check that every step works (tiny training runs)
-bash run_all.sh             # then: the real thing, all 4 models from start to finish
+bash run_all.sh             # then: the real thing, all 6 models from start to finish
 ```
 
 **Stopped halfway** (power cut, closed laptop, an error you fixed)? Run the same command again:
@@ -56,7 +56,8 @@ On the main computer (where the versions are made and pushed):
 ```bash
 tar xzf model4_results.tgz && bash run_all.sh mulde_improved   # minutes: reuses the results, makes a version
 ```
-Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](docs/kaggle.md)), `mulde` (3), `mulde_improved` (4).
+Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](docs/kaggle.md)), `mulde` (3), `mulde_improved` (4),
+`astt_lite` (5, Kaggle works too), `astt_lite_smooth` (6: needs model 5's weights, then only a test run).
 
 ### What you need
 | | |
@@ -87,7 +88,7 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | `outputs/evaluation/<model>/metrics.json` | the numbers of one model |
 | `outputs/training/<model>/` | trained model (`model.pth`), training log, settings used (`run.json`) |
 
-## The four models
+## The models
 
 | # | Model | What it is | Parameters |
 |---|---|---|---|
@@ -95,12 +96,14 @@ Models: `astt_baseline` (1), `astt_improved` (2, or on Kaggle: [docs/kaggle.md](
 | 2 | `astt_improved` | Our upgrade of model 1 (pretrained ViT = transfer learning, spatial tokens, residual prediction) | 100.4M |
 | 3 | `mulde` | MULDE (Micorek et al., CVPR 2024): Hiera-B video features + a density network | 70.7M |
 | 4 | `mulde_improved` | Our MULDE: two clip lengths, one model per camera, lighter density network | 58.1M |
+| 5 | `astt_lite` | Model 2 with only the first 7 of the ViT's 12 blocks (35% smaller) | 64.9M |
+| 6 | `astt_lite_smooth` | Model 5's network + Gaussian smoothing of the score over time (no training) | 64.9M |
 | - | behavior rules | Tracking + rules: LOITERING / COUNTER_FLOW / TOO_FAST per person | 0 |
 
 **No model comes from a library call.** Every network (ViT, Hiera video transformer, Keypoint
 R-CNN) is PyTorch code in this project; only the pretrained *weights* are
 downloaded. `tests/test_nets.py` shows each gives the same output as the reference implementation;
-`tests/test_no_wrappers.py` builds all four models with timm, ultralytics, CLIP, detectron2 and hiera
+`tests/test_no_wrappers.py` builds every model with timm, ultralytics, CLIP, detectron2 and hiera
 blocked. Details and the reason for every change: [docs/models.md](docs/models.md).
 
 ## Folder map

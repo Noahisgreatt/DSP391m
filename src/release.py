@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 
-MODELS = ("astt_baseline", "astt_improved", "mulde", "mulde_improved")
+from src.models import MODELS, trained_dir                     # the one list of models
 REL = Path("releases")
 METRICS = ("auc_raw", "auc_norm", "auc_macro", "eer", "fps_scored")
 
@@ -68,9 +68,9 @@ def snapshot(note="") -> dict:
                       "manual": (read("data/metadata/manual.json") or {}).get("videos")}
     models = {}
     for m in MODELS:
-        w, ev = Path(f"outputs/training/{m}/model.pth"), read(f"outputs/evaluation/{m}/metrics.json")
+        w, ev = trained_dir(m) / "model.pth", read(f"outputs/evaluation/{m}/metrics.json")
         if w.exists():
-            models[m] = {"parameters": ((read(f"outputs/training/{m}/run.json") or {}).get("parameters") or {}).get("Total"),
+            models[m] = {"parameters": ((read(trained_dir(m) / "run.json") or {}).get("parameters") or {}).get("Total"),
                          "weights_md5": md5([w]), "test": {k: ev.get(k) for k in METRICS} if ev else None}
     try:
         import torch
@@ -145,7 +145,7 @@ def write_index():
 
 # ---------------------------------------------------------------- commands
 def release(note):
-    trained = [f"evaluate@{m}" for m in MODELS if Path(f"outputs/training/{m}/model.pth").exists()]
+    trained = [f"evaluate@{m}" for m in MODELS if (trained_dir(m) / "model.pth").exists()]
     if trained and subprocess.run(["dvc", "status", "-q", *trained], capture_output=True).returncode:
         print("warning: some results are older than their code / settings (dvc status): run `dvc repro` first "
               "if you want this version to match")

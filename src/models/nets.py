@@ -172,7 +172,9 @@ class ViT(nn.Module):
             return self
         from safetensors.torch import load_file
         sd = load_file(str(path))
-        sd = {k: v for k, v in sd.items() if not k.startswith("head.")}   # ImageNet classifier
+        depth = len(self.blocks)                        # a shortened ViT (model 5) keeps the first blocks
+        sd = {k: v for k, v in sd.items() if not k.startswith("head.")          # ImageNet classifier
+              and not (k.startswith("blocks.") and int(k.split(".")[1]) >= depth)}
         self.load_state_dict(sd)
         return self
 
@@ -608,7 +610,7 @@ if __name__ == "__main__":
     ap.add_argument("names", nargs="+", help=f"any of {list(WEIGHT_SOURCES)}, or a model / behavior")
     a = ap.parse_args()
     groups = {"astt_baseline": [], "astt_improved": ["vit_b32_384"], "mulde": ["hiera_b16"], "mulde_improved": ["hiera_b16"],
-              "behavior": ["keypointrcnn"]}
+              "astt_lite": ["vit_b32_384"], "astt_lite_smooth": ["vit_b32_384"], "behavior": ["keypointrcnn"]}
     load = {"vit_b32_384": lambda: ViT().load_pretrained(), "hiera_b16": lambda: Hiera().load_pretrained(),
             "keypointrcnn": lambda: RCNN(2, 17).load_pretrained("keypointrcnn")}
     failed = []

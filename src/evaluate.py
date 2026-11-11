@@ -30,8 +30,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 
 from src.utils import frames_dir, load_config, out_dir
 
-MODELS = {"astt_baseline": "Model 1: ASTT (thesis, unchanged)", "astt_improved": "Model 2: ASTT improved (ours)",
-          "mulde": "Model 3: MULDE (Micorek et al.)", "mulde_improved": "Model 4: MULDE improved (ours)"}
+from src.models import MODELS, trained_dir                     # the one list of models
 
 
 # ====================================================================== metrics
@@ -140,7 +139,7 @@ def compare():
     rows, curves = [], []
     for name, s in scores.items():
         raw, norm = np.concatenate([s[v]["score"] for v in common]), np.concatenate([s[v]["score_norm"] for v in common])
-        run, ev_m = root / "training" / name / "run.json", root / "evaluation" / name / "metrics.json"
+        run, ev_m = trained_dir(name, root) / "run.json", root / "evaluation" / name / "metrics.json"
         p = json.loads(run.read_text())["parameters"].get("Total") if run.exists() else None
         rows.append({"key": name, "method": MODELS[name], "parameters_M": round(p / 1e6, 1) if p else None,
                      "auc_raw": float(roc_auc_score(y, raw)), "auc_norm": float(roc_auc_score(y, norm)),
@@ -170,7 +169,7 @@ def compare():
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(5.2, 5), dpi=150)
     ax.plot([0, 1], [0, 1], color="#e4e3dd", lw=1, ls="--")
-    for (name, fpr, tpr, auc), c in zip(curves, ["#2a78d6", "#eb6834", "#7a5cd6", "#d64f8c"]):
+    for (name, fpr, tpr, auc), c in zip(curves, ["#2a78d6", "#eb6834", "#7a5cd6", "#d64f8c", "#1a9e9e", "#8a6a1e"]):
         ax.plot(fpr, tpr, color=c, lw=2, label=f"{name}  AUC {auc * 100:.1f}%")
     if point:
         ax.plot(point[0], point[1], "o", ms=9, color="#1baf7a", label=f"Behavior rules  AUC {point[2] * 100:.1f}%")
