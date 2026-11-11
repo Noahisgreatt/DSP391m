@@ -96,7 +96,17 @@ dvc pull               # the exact data and model files of v1.0 (from Google Dri
 git checkout main      # back to the newest
 ```
 
-## 5. What happens in the background
+## 5. After files were renamed or moved (no result changed)
+DVC fingerprints every code file a step depends on. When files are only moved or renamed (as in
+the v5 folder layout: `src/data.py` -> `src/dataset/`, `src/demo.py` -> `src/inference.py`), DVC
+thinks every step changed. Tell it that the existing results still hold, so nothing is re-run:
+```bash
+for s in $(dvc stage list --name-only); do dvc commit -f -q "$s" 2>/dev/null && echo "up to date: $s"; done
+dvc status        # only steps that never ran are left (e.g. a model not trained yet)
+```
+Only do this when no result changed, and never while a model is still training.
+
+## 6. What happens in the background
 - `dvc repro` runs only the stages whose inputs changed (code, settings, data: md5 in `dvc.lock`).
 - `src.release` writes the card, updates `releases/README.md`, then `git add` + `git commit` +
   `git tag -a <version>` (code, `dvc.lock`, data cards, small results). Big files (data, `model.pth`)

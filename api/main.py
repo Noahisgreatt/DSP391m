@@ -12,7 +12,7 @@ Endpoints
     GET  /metrics                Prometheus metrics
 Default model: configs/api.yaml (api.model), or env VAD_MODEL=astt_baseline | astt_improved | mulde |
 mulde_improved | none. ?model= picks another one per request (loaded on first use, at most
-api.max_models_loaded kept in GPU memory). The web page (ui/app.py) is a client of this API.
+api.max_models_loaded kept in GPU memory). The web page (app/gradio_app.py) is a client of this API.
 """
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ lock = threading.Lock()                      # one video at a time on the GPU
 def analyzer(name: str):
     """The Analyzer of one model, loaded on first use; the least recently used is dropped beyond
     api.max_models_loaded. A model that is not trained / evaluated serves the rules only."""
-    from src.demo import Analyzer
+    from src.inference import Analyzer
     pool = state["analyzers"]
     if name not in pool:
         pool[name] = Analyzer(name, allow_missing=True)

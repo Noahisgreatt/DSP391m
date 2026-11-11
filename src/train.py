@@ -10,7 +10,7 @@ Stopped (shutdown, crash, Ctrl+C)? Run the SAME command again: it continues from
 checkpoint (saved every `checkpoint_minutes` and after every epoch).
 
 Out: outputs/training/<model>/
-    model.pth     trained weights (DVC-versioned; what evaluation / demo / API load)
+    model.pth     trained weights (DVC-versioned; what evaluation / inference / API load)
     metrics.json  epochs, final loss, parameters              log.csv         loss over time
     run.json      settings, git commit, parameters            checkpoint.pth  to continue a run
 While it runs, live numbers for Grafana: http://localhost:8001/metrics (configs/api.yaml).
@@ -32,7 +32,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as tud
 
-from src.data import load_split, train_dataset
+from src.dataset import load_split, train_dataset
 from src.utils import config_hash, frames_dir, git_commit, load_config, out_dir
 
 

@@ -19,7 +19,7 @@ outputs/evaluation/*_smoke/
 outputs/evaluation/*/scores/
 outputs/behavior/*/events/
 outputs/api/
-outputs/demo/
+outputs/inference/
 *.pth
 *.pt
 *.tmp

@@ -7,7 +7,7 @@
 # GPU (NVIDIA + WSL): docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
 services:
   api:
-    build: .
+    build: {context: ., dockerfile: docker/Dockerfile.api}
     image: dsp391m-vad-api:3.0
     ports: ["8000:8000"]
     environment:
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   ui:
-    build: {context: ., dockerfile: Dockerfile.ui}
+    build: {context: ., dockerfile: docker/Dockerfile.ui}
     image: dsp391m-vad-ui:3.0
     ports: ["7860:7860"]
     environment:

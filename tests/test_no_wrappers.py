@@ -18,7 +18,7 @@ for n in ('astt_baseline', 'astt_improved', 'astt_lite', 'astt_lite_smooth'):
     astt.build(load_config(f'configs/{n}.yaml'), pretrained=False)
 for n in ('mulde', 'mulde_improved'):
     mulde.Features(load_config(f'configs/{n}.yaml'), torch.device('cpu'), weights=False)
-import src.data, src.behavior, src.train, src.evaluate, src.demo
+import src.dataset, src.behavior, src.train, src.evaluate, src.inference
 print('OK')
 """
 

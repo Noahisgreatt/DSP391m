@@ -12,7 +12,7 @@ Higher = more abnormal for all.
              crowd size, so raw scores of different videos aren't comparable). This is why the
              old ASTT run gave 0.518 raw but 0.616 normalised with the SAME model.
   auc_macro  mean of the per-video AUCs ("macro", the second number MULDE reports)
-  eer        equal error rate (lower is better); threshold_raw_at_eer is used by the demo / API
+  eer        equal error rate (lower is better); threshold_raw_at_eer is used by inference / API
 Out: outputs/evaluation/<model>/metrics.json, roc.csv, scores/<video>.npz
      outputs/comparison/comparison.md|json, roc.png, benchmark.md|json
 """
@@ -90,7 +90,7 @@ def binary_metrics(y, flags):
 
 # ====================================================================== one model
 def evaluate(config, smoke=False, limit=None, max_hours=None):
-    from src.data import load_split, video_labels
+    from src.dataset import load_split, video_labels
     from src.models import scorer as make_scorer
     cfg = load_config(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -182,7 +182,7 @@ def compare():
 
 # ====================================================================== size and speed
 def benchmark(models, n_frames):
-    from src.data import load_split
+    from src.dataset import load_split
     base = load_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     vid = load_split(base)["test"][0]
@@ -209,7 +209,7 @@ def benchmark(models, n_frames):
             ms = {"features": round((t1 - t0) / len(X) * 1000, 2), "density": round((time.time() - t1) / len(X) * 1000, 2)}
             params = parameters(cfg)
         else:
-            from src.data import video_dataset
+            from src.dataset import video_dataset
             from src.models.astt import autocast, count_parameters, load_trained
             model = load_trained(cfg, ckpt, device)
             ds, _ = video_dataset(cfg, vdir)

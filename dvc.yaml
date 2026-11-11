@@ -1,5 +1,5 @@
 # DVC pipeline: `dvc dag` draws it, `dvc repro <stage>` runs a stage + everything it needs.
-#   1 data      prepare_shanghaitech, prepare_manual, split                  (src/data.py)
+#   1 data      prepare_shanghaitech, prepare_manual, split                  (src/dataset/prepare.py)
 #   2 behavior  behavior@shanghaitech, behavior@manual                        (src/behavior.py)
 #   3 models    train@<model> for all four                                    (src/train.py)
 #   4 evaluate  evaluate@<model>, compare, benchmark                          (src/evaluate.py)
@@ -10,16 +10,16 @@
 stages:
   # ------------------------------------------------------------------ 1. data
   prepare_shanghaitech:
-    cmd: python -m src.data prepare
-    deps: [data/raw/shanghaitech, src/data.py]
+    cmd: python -m src.dataset prepare
+    deps: [data/raw/shanghaitech, src/dataset/prepare.py]
     outs:
       - data/processed/shanghaitech: {cache: false}
     metrics:
       - data/metadata/shanghaitech.json: {cache: false}      # data card
 
   prepare_manual:
-    cmd: python -m src.data manual
-    deps: [data/raw/manual, src/data.py]
+    cmd: python -m src.dataset manual
+    deps: [data/raw/manual, src/dataset/prepare.py]
     params:
       - configs/data.yaml: [frames]
     outs:
@@ -28,8 +28,8 @@ stages:
       - data/metadata/manual.json: {cache: false}
 
   split:
-    cmd: python -m src.data split
-    deps: [data/metadata/shanghaitech.json, src/data.py]   # the card changes exactly when the data does
+    cmd: python -m src.dataset split
+    deps: [data/metadata/shanghaitech.json, src/dataset/prepare.py]   # the card changes exactly when the data does
     outs:
       - data/metadata/split.json: {cache: false}
 

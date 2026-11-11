@@ -1,12 +1,12 @@
-"""Step 6, DEMO: analyze ONE video end to end and draw the result. The API (api/main.py) uses it.
+"""Step 6, INFERENCE: analyze ONE video end to end and draw the result. The API (api/main.py) uses it.
 
-    python -m src.demo --video path/to/clip.mp4 --model mulde_improved
-    python -m src.demo --video data/processed/shanghaitech/frames/01_0014 --model astt_baseline
-    python -m src.demo --video clip.mp4 --model none          # behavior rules only
+    python -m src.inference --video path/to/clip.mp4 --model mulde_improved
+    python -m src.inference --video data/processed/shanghaitech/frames/01_0014 --model astt_baseline
+    python -m src.inference --video clip.mp4 --model none          # behavior rules only
 
 Steps: 1 cut into frames  2 find + track people  3 behavior rules (loitering / counter-flow /
 too fast)  4 model score per frame vs. the EER threshold from evaluation  5 draw.
-Out: outputs/demo/<video>/result.mp4 (H.264, plays in a browser) + result.json
+Out: outputs/inference/<video>/result.mp4 (H.264, plays in a browser) + result.json
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import torch
 
 from src.behavior import (COUNTER, DIRECTIONS, EVENTS, FAST, LOITER, PeopleTracker, angle_to_bin, detect_events,
                           per_person, summarize)
-from src.data import extract_video
+from src.dataset import extract_video
 from src.utils import list_frames, load_config, out_dir, read_frame
 
 RED, YELLOW, WHITE = (0, 0, 255), (0, 200, 255), (255, 255, 255)
@@ -270,7 +270,7 @@ def main():
     ap.add_argument("--threshold", type=float, help="frame threshold (default: EER from evaluation)")
     a = ap.parse_args()
     v = Path(a.video)
-    r = Analyzer(a.model, a.threshold).run(v, Path(load_config()["paths"]["outputs"]) / "demo" / (v.stem if v.is_file() else v.name))
+    r = Analyzer(a.model, a.threshold).run(v, Path(load_config()["paths"]["outputs"]) / "inference" / (v.stem if v.is_file() else v.name))
     print(f"{r['video']}: {len(r['abnormal_frames'])}/{r['frames']} abnormal frames, {r['people_tracked']} people, "
           f"events {r['event_counts']}\nwrote {r['result_video']}")
 

@@ -21,7 +21,7 @@ def test_api(tmp_path, monkeypatch):
         cv2.rectangle(img, (5 + 3 * t, 30), (15 + 3 * t, 60), (0, 0, 255), -1)
         w.write(img)
     w.release()
-    monkeypatch.setattr("src.demo.PeopleTracker", NoPeople)
+    monkeypatch.setattr("src.inference.PeopleTracker", NoPeople)
     monkeypatch.setenv("VAD_MODEL", "none")
     import api.main as m
     monkeypatch.setattr(m, "WORK", tmp_path / "api")
@@ -42,7 +42,7 @@ def test_api(tmp_path, monkeypatch):
 
 def test_api_model_not_trained_yet(tmp_path, monkeypatch):
     """A fresh clone (no outputs/) still starts: rules only, and /health says why."""
-    monkeypatch.setattr("src.demo.PeopleTracker", NoPeople)
+    monkeypatch.setattr("src.inference.PeopleTracker", NoPeople)
     monkeypatch.setenv("VAD_MODEL", "astt_improved")
     monkeypatch.chdir(tmp_path)                         # no outputs/training/... here
     (tmp_path / "configs").symlink_to(__import__("pathlib").Path(__file__).resolve().parents[1] / "configs")
@@ -55,7 +55,7 @@ def test_api_model_not_trained_yet(tmp_path, monkeypatch):
 
 def test_people_summary():
     """Main walking direction per person, and which behaviors were flagged for them."""
-    from src.demo import people_summary
+    from src.inference import people_summary
     tracks = np.array([[t, 1, 0, 0, 10, 10, 1] for t in range(10)] + [[t, 2, 0, 0, 10, 10, 1] for t in range(10)], np.float32)
     vel = np.array([[3, 0]] * 10 + [[0, 0]] * 10, np.float32)                 # #1 walks right, #2 stands
     moving = np.array([True] * 10 + [False] * 10)

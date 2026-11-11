@@ -109,28 +109,31 @@ blocked. Details and the reason for every change: [docs/models.md](docs/models.m
 ## Folder map
 
 ```
-run_all.sh           ONE command for everything (above)
-serve.sh             start the web page + API without Docker (bash serve.sh -> http://localhost:7860)
-kaggle.sh            train one model on a free Kaggle GPU at the same time (docs/kaggle.md)
-configs/             ALL settings
-  data.yaml  behavior.yaml  api.yaml
-  astt_baseline.yaml  astt_improved.yaml  mulde.yaml  mulde_improved.yaml   (one per model)
-src/                 ALL code, one file per step
-  data.py        1  get, unpack and split the data; feed it to the models
-  models/        2  astt.py (models 1, 2)  mulde.py (models 3, 4)  nets.py (the networks)
-  train.py       3  train any model (the config decides which)
-  evaluate.py    4  AUC / EER of one model, comparison table, size + speed benchmark
-  behavior.py    5  people tracking, loitering, counter-flow
-  demo.py        6  one video in -> annotated video + JSON out (used by the API)
-  utils.py          settings, paths, reading frames
-  release.py        versions v1.0, v1.1, v2.0 ... with metadata (what changed)
-api/main.py       FastAPI service + Prometheus metrics          monitoring/  Prometheus + Grafana
-ui/app.py         the web page (Gradio), a client of the API     Dockerfile(.ui), docker-compose.yml
-tests/            pytest                                          docs/        notes for the report
-third_party/      the thesis code (downloaded at a fixed version, never edited)
-dvc.yaml          the pipeline run_all.sh uses (dvc dag draws it)
-data/   (DVC)     raw/ -> processed/ ; metadata/ (data cards, split)
-outputs/(DVC)     training/<model>/  evaluation/<model>/  behavior/  comparison/
+README.md  requirements.txt (+ requirements-api.txt, requirements-ui.txt)
+data/                 data versioned with DVC (only pointers + data cards in git): data/README.md
+notebooks/            01_eda.ipynb (the data)   02_error_analysis.ipynb (where the models fail)
+src/                  ALL code of the pipeline, one file per step
+  dataset/        1   prepare.py: get, unpack, split   loaders.py: feed the models
+  models/         2   __init__.py: the list of models   astt.py (1, 2, 5, 6)   mulde.py (3, 4)   nets.py (networks)
+  train.py        3   train any model (the config decides which)
+  evaluate.py     4   AUC / EER of one model, comparison table, size + speed benchmark
+  behavior.py     5   people tracking, loitering, counter-flow
+  inference.py    6   one video in -> annotated video + JSON out (used by the API)
+  verify.py           recompute every metric independently     release.py   versions + metadata
+  utils.py            settings, paths, reading frames
+configs/              ALL settings: data, behavior, api + one file per model
+app/gradio_app.py     the web page (Gradio), a client of the API
+api/main.py           FastAPI service + Prometheus metrics
+docker/               Dockerfile.api, Dockerfile.ui   (docker-compose.yml at the root starts everything)
+.github/workflows/    CI/CD: tests + Docker build on every push, images published on every version tag
+reports/              results, figures (reports/figures/), how to check them: reports/README.md
+docs/                 technical notes: models, MLOps, versions, Kaggle
+monitoring/           Prometheus + Grafana          tests/   pytest
+releases/             the version cards (v2.0, v4.0 ...)
+third_party/          the thesis code (downloaded at a fixed version, never edited)
+run_all.sh  serve.sh  kaggle.sh   one command for everything / the web page / training on Kaggle
+dvc.yaml  dvc.lock    the pipeline and the exact version of every file (dvc dag draws it)
+outputs/ (DVC)        training/<model>/  evaluation/<model>/  behavior/  comparison/
 ```
 
 ## One step at a time (what run_all.sh calls)
@@ -141,10 +144,10 @@ python -m src.evaluate --config configs/astt_baseline.yaml   # AUC / EER on the 
 python -m src.evaluate --compare                             # table of all evaluated models
 python -m src.evaluate --benchmark                           # size and speed of every model
 python -m src.verify                                         # recompute every AUC / EER independently (check the numbers)
-python -m src.verify                                         # recompute every AUC / EER independently (check the numbers)
 python -m src.behavior --dataset shanghaitech                # loitering / counter-flow rules
-python -m src.demo --video clip.mp4 --model mulde_improved   # one video -> outputs/demo/clip/
+python -m src.inference --video clip.mp4 --model mulde_improved   # one video -> outputs/inference/clip/
 python -m src.release --note "what changed"                  # save a new version (v1.0, v1.1, v2.0 ...)
+jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb   # EDA + error analysis -> reports/figures/
 python -m pytest -q tests                                    # everything still works?
 ```
 Same with DVC (records what was run): `dvc repro train@astt_baseline`, `dvc repro evaluate@mulde`,
@@ -179,6 +182,6 @@ Prometheus + Grafana (`docker compose up --build -d` -> Grafana http://localhost
 | What did you improve? | `configs/astt_improved.yaml`, `configs/mulde_improved.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |
 | How are loitering / counter-flow decided? | `src/behavior.py` (functions `loitering`, `counter_flow`); thresholds in `configs/behavior.yaml` |
 | How is accuracy measured? | `src/evaluate.py` (one metric code for all models); `python -m src.verify` recomputes it independently from the saved per-frame scores and the dataset's own labels |
-| Which videos are train / test? | `data/metadata/split.json`, made by `src/data.py` |
+| Which videos are train / test? | `data/metadata/split.json`, made by `src/dataset/` |
 | What changed between two versions? | `python -m src.release --diff v1.0 v2.0` (or `dvc metrics diff v1.0 v2.0`) |
 | How do I get exactly version 1 back? | `git checkout v1.0 && dvc pull` |

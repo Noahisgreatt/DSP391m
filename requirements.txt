@@ -21,4 +21,8 @@ python-multipart>=0.0.9
 prometheus-client>=0.20
 httpx>=0.27          # API tests
 pytest>=8.0
+# notebooks/ (EDA, error analysis): jupyter nbconvert --to notebook --execute --inplace notebooks/*.ipynb
+pandas>=2.0
+nbconvert>=7.0
+ipykernel>=6.0
 # the web page: pip install -r requirements-ui.txt  (or docker compose, which runs it in its own container)

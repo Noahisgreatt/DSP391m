@@ -1,7 +1,7 @@
-# MLOps: DVC, FastAPI, web page, Docker, Prometheus, Grafana
+# MLOps: DVC, FastAPI, web page, Docker, CI/CD, Prometheus, Grafana
 
 ```
- browser ──> web page (Gradio, :7860) ──HTTP──> FastAPI (:8000) ──> src/demo.py: tracking + rules + model
+ browser ──> web page (Gradio, :7860) ──HTTP──> FastAPI (:8000) ──> src/inference.py: tracking + rules + model
                                                      │ /metrics
                                          Prometheus (:9090) ──> Grafana (:3000)
 ```
@@ -24,7 +24,7 @@
 - **Metrics / plots**: `dvc metrics show`, `dvc plots show` (ROC of every model).
 - **Model registry**: `artifacts:` in `dvc.yaml` describes the trained models (path, type, labels).
 
-## FastAPI (`api/main.py`, uses `src/demo.py`)
+## FastAPI (`api/main.py`, uses `src/inference.py`)
 `uvicorn api.main:app --port 8000`, then http://localhost:8000/docs
 | Endpoint | |
 |---|---|
@@ -38,18 +38,25 @@ Default model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|muld
 GPU memory). A model that isn't trained + evaluated yet serves the behavior rules only, with a
 `warning`. Only the newest `keep_jobs` results are kept on disk.
 
-## Web page (`ui/app.py`, Gradio)
+## Web page (`app/gradio_app.py`, Gradio)
 http://localhost:7860: upload a video, pick a model (with its test AUC), press **Analyze**. Shows the
 result video, "N of M people behave abnormally" with who / what / when, a table of every person and
 their main direction, the anomaly score over time, and the raw JSON to download. It is only a
 client of the API (no PyTorch in its container), so the same API serves the page, scripts and Grafana.
-Without Docker: `pip install -r requirements-ui.txt && python -m ui.app` (API_URL, default :8000).
+Without Docker: `pip install -r requirements-ui.txt && python -m app.gradio_app` (API_URL, default :8000).
 
 ## Docker
-`docker compose up --build -d` starts 4 containers: `ui` (web page), `api` (FastAPI, model weights
+`docker compose up --build -d` builds `docker/Dockerfile.api` and `docker/Dockerfile.ui` and starts 4 containers: `ui` (web page), `api` (FastAPI, model weights
 mounted from `outputs/`), `prometheus`, `grafana`. GPU: add `-f docker-compose.gpu.yml`.
 The models must be trained (or `dvc pull`ed) first, so that `outputs/training/<model>/model.pth`
 and `outputs/evaluation/<model>/metrics.json` exist.
+
+## CI/CD (`.github/workflows/ci.yml`, GitHub Actions)
+| When | What runs |
+|---|---|
+| every push / pull request | install (CPU PyTorch), fetch the thesis code, **all tests** (`pytest`), check the compose files, build the web page image |
+| every version tag (`v5.0` ..., pushed with `git push --follow-tags`) | build both images and publish them: `ghcr.io/<owner>/dsp391m-api:<version>`, `ghcr.io/<owner>/dsp391m-ui:<version>` (GitHub -> Packages) |
+Results: the repository's **Actions** tab (a green tick per commit).
 
 ## Monitoring (Prometheus + Grafana)
 Grafana http://localhost:3000 (admin/admin), dashboard **DSP391m - Video anomaly detection**:

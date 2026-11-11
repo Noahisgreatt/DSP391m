@@ -19,4 +19,4 @@ done
 echo "API ready: http://localhost:8000/docs"
 echo "WEB PAGE:  http://localhost:7860   (Ctrl+C here stops both)"
 [[ "$1" == "--share" ]] && export UI_SHARE=1 && echo "public link: wait for 'Running on public URL' below"
-python -m ui.app
+python -m app.gradio_app

@@ -3,8 +3,8 @@
 abnormal. It only talks to the FastAPI service (api/main.py) over HTTP.
 
     docker compose up -d        -> http://localhost:7860
-    python -m ui.app            -> http://localhost:7860   (API_URL, default http://localhost:8000)
-    UI_SHARE=1 python -m ui.app -> also a public https://....gradio.live link (72 h) for people elsewhere
+    python -m app.gradio_app            -> http://localhost:7860   (API_URL, default http://localhost:8000)
+    UI_SHARE=1 python -m app.gradio_app -> also a public https://....gradio.live link (72 h) for people elsewhere
 """
 from __future__ import annotations
 

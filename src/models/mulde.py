@@ -68,7 +68,7 @@ class Features:
 
     def video(self, frame_dir, vid, split=None, stride=1, max_frames=None):
         """(frames, features) of one video: features for frames 0, stride, 2*stride, ...;
-        steps joined side by side (768 per step). split=None: no cache (demo / API)."""
+        steps joined side by side (768 per step). split=None: no cache (inference / API)."""
         paths = list_frames(frame_dir)[:max_frames]
         centres = np.arange(0, len(paths), stride)
         files = [self.root / split / f"{vid}_s{s}_e{stride}_n{len(paths)}.npy" if split else None
@@ -183,7 +183,7 @@ def parameters(cfg):
 
 def fit(cfg, smoke=False, fresh=False, max_hours=None):
     """Features of the normal training videos -> density network -> mixture(s) -> outputs/training/<model>/."""
-    from src.data import load_split
+    from src.dataset import load_split
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m, d, s = cfg["model"], cfg["density"], cfg["scoring"]
     out = out_dir(cfg, "training", smoke)
@@ -230,7 +230,7 @@ def fit(cfg, smoke=False, fresh=False, max_hours=None):
 
 
 class Scorer:
-    """Score one video with a fitted model 3 / 4 (used by evaluate, demo, API)."""
+    """Score one video with a fitted model 3 / 4 (used by evaluate, inference, API)."""
     kind = "score"
 
     def __init__(self, cfg, checkpoint, device, smoke=False):

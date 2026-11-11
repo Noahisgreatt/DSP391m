@@ -62,7 +62,7 @@ elif dvc pull -q data/raw/shanghaitech.dvc 2>/dev/null; then
     echo "ShanghaiTech pulled from the DVC remote"
 elif [[ -f ~/.kaggle/kaggle.json || -n "${KAGGLE_KEY:-}" ]]; then
     echo "no access to the DVC remote: downloading from Kaggle (~21 GB)"
-    python -m src.data download || die "Kaggle download failed"
+    python -m src.dataset download || die "Kaggle download failed"
 else
     die "no data. Either get access to the DVC remote (dvc pull), or put a Kaggle API token in
 ~/.kaggle/kaggle.json (kaggle.com -> Settings -> API -> Create New Token)"

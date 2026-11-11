@@ -13,8 +13,8 @@ export PYTHONUNBUFFERED=1
 pip install -q safetensors
 python third_party/fetch.py
 python -m src.models.nets download "$MODEL"
-python -m src.data link /kaggle/input/*/                        # the unpacked videos: linked, not copied
-python -m src.data split
+python -m src.dataset link /kaggle/input/*/                        # the unpacked videos: linked, not copied
+python -m src.dataset split
 OUT=outputs/training/$MODEL
 PREV=$(ls -d /kaggle/input/*/"$MODEL" 2>/dev/null | head -1 || true)
 if [[ -n "$PREV" && ! -f "$OUT/checkpoint.pth" ]]; then         # continue the previous session's run

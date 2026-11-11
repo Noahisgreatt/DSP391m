@@ -10,7 +10,7 @@ def test_prepare_and_split(tmp_path, monkeypatch):
     shutil.copytree("configs", tmp_path / "configs")
     fake_data.make(tmp_path / "data/raw/shanghaitech", n_frames=12)
     monkeypatch.chdir(tmp_path)
-    from src.data import make_split, prepare_shanghaitech
+    from src.dataset import make_split, prepare_shanghaitech
     from src.utils import load_config
     cfg = load_config()
     prepare_shanghaitech(cfg)

@@ -1,10 +1,10 @@
-"""Step 1, DATA: get it, unpack it, split it, and feed it to the models.
+"""Step 1, DATA: get it, unpack it, split it. (Feeding it to the models: loaders.py.)
 
-    python -m src.data download                       # the 2 zips from Kaggle (needs a Kaggle API token)
-    python -m src.data prepare                        # unzip ShanghaiTech + data card   (DVC: prepare_shanghaitech)
-    python -m src.data manual                         # cut our phone videos into frames (DVC: prepare_manual)
-    python -m src.data split                          # official train / test split      (DVC: split)
-    python -m src.data link DIR [DIR ...]             # use already-unpacked folders instead (Kaggle)
+    python -m src.dataset download                       # the 2 zips from Kaggle (needs a Kaggle API token)
+    python -m src.dataset prepare                        # unzip ShanghaiTech + data card   (DVC: prepare_shanghaitech)
+    python -m src.dataset manual                         # cut our phone videos into frames (DVC: prepare_manual)
+    python -m src.dataset split                          # official train / test split      (DVC: split)
+    python -m src.dataset link DIR [DIR ...]             # use already-unpacked folders instead (Kaggle)
 
 Files:
   data/raw/shanghaitech/{train,test}.zip   Kaggle parts (238 + 199 videos as frames), DVC-tracked
@@ -30,11 +30,9 @@ from pathlib import Path, PurePosixPath
 
 import cv2
 import numpy as np
-import torch
-import torch.utils.data as tud
 import yaml
 
-from src.utils import IMAGE_EXTS, frames_dir, labels_dir, list_frames, load_config
+from src.utils import IMAGE_EXTS, frames_dir, labels_dir, load_config
 
 TRAIN_RE, TEST_RE = re.compile(r"\d{2}_\d{3}"), re.compile(r"\d{2}_\d{4}")
 
@@ -77,7 +75,7 @@ def prepare_shanghaitech(cfg):
     for part in ("train", "test"):
         zp = raw / f"{part}.zip"
         if not zp.exists():
-            raise SystemExit(f"{zp} missing: run `dvc pull` or `python -m src.data download`")
+            raise SystemExit(f"{zp} missing: run `dvc pull` or `python -m src.dataset download`")
         vids, n_lab = set(), 0
         with zipfile.ZipFile(zp) as z:
             members = [m for m in z.infolist() if not m.is_dir() and "pixel" not in m.filename.lower()]
@@ -148,7 +146,7 @@ def _write_card(cfg, name, card):
 
 # ====================================================================== our phone videos
 def extract_video(video_path, out_dir, size=None, step=1, quality=95) -> dict:
-    """Video file -> out_dir/000000.jpg ... + meta.json. Also used by the demo / API."""
+    """Video file -> out_dir/000000.jpg ... + meta.json. Also used by inference / API."""
     cv2.setNumThreads(1)
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -215,75 +213,10 @@ def video_labels(cfg, vid, n_frames) -> np.ndarray:
     return lab
 
 
-# ====================================================================== PyTorch datasets (models 1, 2)
-LINKS = Path("data/processed/_links")      # folders of links the thesis repo's loader can read
-
-
-def _jpg_view(src, dst):
-    dst.mkdir(parents=True, exist_ok=True)
-    for f in list_frames(src):
-        if not (dst / f.name).exists():
-            os.symlink(f.resolve(), dst / f.name)
-    return dst
-
-
-def _repo_loader(folder, size):
-    """The thesis repo's own data_utils.DataLoader (BGR, [-1, 1]), unchanged."""
-    import torchvision.transforms as T
-    from third_party.ASTT.data_utils import DataLoader
-    return DataLoader(str(folder), T.Compose([T.ToTensor()]), resize_height=size, resize_width=size)
-
-
-class VideoWindows(tud.Dataset):
-    """Model 2: windows of T+1 frames that never cross two videos; each frame read once.
-    Item: {"standard": (T+1, 3, S, S), "256": (T+1, 3, 256, 256)}, values in [-1, 1]."""
-
-    def __init__(self, video_dirs, T=4, size=384, out=256, rgb=True):
-        self.T, self.size, self.out, self.rgb = T, size, out, rgb
-        self.frames = [list_frames(d) for d in video_dirs]
-        self.index = [(v, i) for v, fr in enumerate(self.frames) for i in range(len(fr) - T)]
-
-    def __len__(self):
-        return len(self.index)
-
-    def _load(self, p):
-        img = cv2.imread(str(p))
-        if self.rgb:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        f = lambda s: (cv2.resize(img, (s, s)).astype(np.float32) / 127.5 - 1).transpose(2, 0, 1)
-        return f(self.size), f(self.out)
-
-    def __getitem__(self, k):
-        v, i = self.index[k]
-        pairs = [self._load(p) for p in self.frames[v][i:i + self.T + 1]]
-        return {"standard": torch.from_numpy(np.stack([a for a, _ in pairs])),
-                "256": torch.from_numpy(np.stack([b for _, b in pairs]))}
-
-
-def train_dataset(cfg, video_dirs):
-    m = cfg["model"]
-    if cfg["input"]["loader"] == "repo":          # model 1: one folder with all videos (repo quirk)
-        root = LINKS / "train" / m["name"]
-        for d in video_dirs:
-            _jpg_view(d, root / d.name)
-        return _repo_loader(root, m["image_size"])
-    return VideoWindows(video_dirs, m["num_frames"], m["image_size"], m["output_size"], cfg["input"]["color"] == "rgb")
-
-
-def video_dataset(cfg, video_dir):
-    """Windows of ONE video (for scoring) and its number of frames."""
-    m, video_dir = cfg["model"], Path(video_dir)
-    if cfg["input"]["loader"] == "repo":
-        ds = _repo_loader(_jpg_view(video_dir, LINKS / "videos" / video_dir.parent.parent.name / video_dir.name),
-                          m["image_size"])
-        return ds, len(ds.video_frames)
-    ds = VideoWindows([video_dir], m["num_frames"], m["image_size"], m["output_size"], cfg["input"]["color"] == "rgb")
-    return ds, len(ds.frames[0])
-
-
 # ====================================================================== command line
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="python -m src.dataset", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("step", choices=["download", "prepare", "manual", "split", "link"])
     ap.add_argument("folders", nargs="*", help="link: folders that hold the unpacked videos")
     a = ap.parse_args()

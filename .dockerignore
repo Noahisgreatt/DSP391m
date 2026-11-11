@@ -12,3 +12,6 @@ releases/
 weights/
 third_party/ASTT/
 .venv/
+notebooks/
+reports/
+.github/

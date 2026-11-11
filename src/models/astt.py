@@ -155,7 +155,7 @@ def gradient_loss(pred, target):
 def score_video(model, cfg, video_dir, device, maps=False, num_workers=None):
     """The repo's test_all_scenes: predict frame t from t-4..t-1, score = MSE at 256x256.
     -> mse (n_frames,), NaN for the first 4 frames [, error maps for drawing]."""
-    from src.data import video_dataset
+    from src.dataset import video_dataset
     ds, n = video_dataset(cfg, Path(video_dir))
     dl = tud.DataLoader(ds, batch_size=cfg["eval"]["batch_size"], shuffle=False,
                         num_workers=cfg["train"]["num_workers"] if num_workers is None else num_workers)
@@ -190,7 +190,7 @@ def smooth(mse, sigma):
 
 
 class Scorer:
-    """Score one video with a trained model 1 / 2 / 5 / 6 (used by evaluate, demo, API)."""
+    """Score one video with a trained model 1 / 2 / 5 / 6 (used by evaluate, inference, API)."""
     kind = "mse"
 
     def __init__(self, cfg, checkpoint, device, **_):

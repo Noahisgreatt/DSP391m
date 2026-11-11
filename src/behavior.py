@@ -376,7 +376,7 @@ def detect_all(cfg, dataset, vids):
         for e in events:
             counts[e["event"]] += 1
         if dataset == "shanghaitech":
-            from src.data import video_labels
+            from src.dataset import video_labels
             ys.append(video_labels(cfg, vid, len(frame_flags)))
             ff.append(frame_flags > 0)
     metrics = {"videos": len(vids), "events": counts}
@@ -396,7 +396,7 @@ def main():
     vids = list_videos(frames_dir(cfg, a.dataset))
     test, normal = vids, vids                                  # manual: the same videos for both
     if a.dataset == "shanghaitech":
-        from src.data import load_split
+        from src.dataset import load_split
         split = load_split(cfg)
         test, normal = [x for x in vids if x[0] in split["test"]], [x for x in vids if x[0] in split["train"]]
     test, normal = test[: a.limit], normal[: a.limit]

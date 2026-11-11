@@ -5,7 +5,7 @@ pytest.importorskip("gradio")
 
 
 def test_summary_and_tables():
-    from ui.app import summary, tables
+    from app.gradio_app import summary, tables
     r = {"video": "clip.mp4", "frames": 50, "fps": 25.0, "model": "mulde", "people_tracked": 2, "timings": {"total_s": 3.0},
          "events": [{"track_id": 2, "event": "COUNTER_FLOW", "reason": "moving against the crowd", "start_s": 0.4, "end_s": 1.2}],
          "people": [{"track_id": 1, "from_s": 0, "to_s": 2, "direction": "right", "moving_share": 1.0, "events": []},
@@ -22,7 +22,7 @@ def test_summary_and_tables():
 
 def test_model_list_has_no_rules_only_entry(monkeypatch):
     """The dropdown offers the four models only (the rules run with every model anyway)."""
-    import ui.app as app
+    import app.gradio_app as app
 
     class R:
         def json(self):
