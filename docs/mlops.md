@@ -57,7 +57,16 @@ the image contains model 2's trained weights, so no code, data or DVC is needed 
 `docker run --gpus all -p 7860:7860 ghcr.io/<owner>/dsp391m-app`. Built and published from the
 computer that has the model: `bash docker/publish.sh v5.0` (once: `docker login ghcr.io`).
 Settings by environment: `VAD_MODELS` (offered models, default model 2 only), `VAD_MAX_SECONDS`
-(longest part of a video analyzed, default 60; 0 = all). CI builds a CPU variant with stand-in
+(longest part of a video analyzed, default 60; 0 = all), and for a server without a GPU
+`VAD_DETECTOR_SIZE` / `VAD_DETECT_EVERY` (find people at a smaller size, on every n-th frame).
+The API scores models 2, 5, 6 with `src/models/astt_fast.py`: each frame through the ViT once
+instead of 4 times, the same scores (tested), ~2.8x faster on a CPU.
+
+**Online, free (Hugging Face Space, CPU):** `docker/huggingface/` (a Dockerfile `FROM` the CPU app
+image + light mode: 15 s, 480 px, every 3rd frame; about 3-5 min per 10-s clip on its 2 cores).
+Create a Space (SDK Docker, blank, public), upload these two files, done; after a new
+`publish.sh`: Space -> Settings -> Factory rebuild. Page at the Space's address, API at `/docs`.
+**Live demo, fast:** `bash serve.sh --share` on the laptop (GPU) gives a public link while it runs. CI builds a CPU variant with stand-in
 weights on every push, runs it as a non-root user and analyzes a test video through the API.
 
 ## CI/CD (`.github/workflows/ci.yml`, GitHub Actions)

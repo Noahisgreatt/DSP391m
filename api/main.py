@@ -128,7 +128,8 @@ async def count_requests(request: Request, call_next):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", **analyzer(state["default"]).info()}
+    return {"status": "ok", **analyzer(state["default"]).info(), "max_seconds": MAX_SECONDS,
+            "light_tracking": bool(os.environ.get("VAD_DETECTOR_SIZE") or int(os.environ.get("VAD_DETECT_EVERY") or 1) > 1)}
 
 
 @app.get("/models")

@@ -46,7 +46,23 @@ def models():
 
 def refresh():
     choices, default = models()
-    return gr.Dropdown(choices=choices, value=default)
+    return gr.Dropdown(choices=choices, value=default), notice()
+
+
+def notice() -> str:
+    """What this server can do, from GET /health: shown above the upload box."""
+    try:
+        h = requests.get(f"{API}/health", timeout=10).json()
+    except (requests.RequestException, ValueError):
+        return ""
+    parts = []
+    if h.get("device") == "cpu":
+        parts.append("This server has **no GPU**: a 10-second clip takes a few minutes. Short clips work best.")
+    if h.get("max_seconds"):
+        parts.append(f"Only the first **{h['max_seconds']:.0f} s** of a video are analyzed.")
+    if h.get("light_tracking"):
+        parts.append("People are found on every few frames at a lower resolution (faster, slightly coarser).")
+    return ("> " + " ".join(parts)) if parts else ""
 
 
 def summary(r: dict) -> str:
@@ -155,6 +171,7 @@ def build() -> gr.Blocks:
                     "walks, who is **loitering**, moving **against the crowd** or **running**, and when the scene is abnormal.")
         with gr.Row():
             with gr.Column(scale=2):
+                limits = gr.Markdown()
                 video_in = gr.Video(label="Your video (.mp4 / .avi / .mov / phone HEVC: converted to H.264 on upload)",
                                     sources=["upload"])
                 model = gr.Dropdown(choices, value=default, label="Model")
@@ -174,7 +191,7 @@ def build() -> gr.Blocks:
                 raw = gr.File(label="result.json")
         video_in.upload(prepare_upload, video_in, video_in)               # playable preview, smaller upload to the API
         go.click(analyze, [video_in, model], [video_out, info, events, people, curve, raw])
-        page.load(refresh, None, model)              # every page load asks the API again (it may have started later)
+        page.load(refresh, None, [model, limits])              # every page load asks the API again (it may have started later)
     return page
 
 

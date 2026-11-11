@@ -11,7 +11,9 @@ Out: outputs/inference/<video>/result.mp4 (H.264, plays in a browser) + result.j
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -21,7 +23,8 @@ import cv2
 import numpy as np
 import torch
 
-from src.behavior import (COUNTER, DIRECTIONS, EVENTS, FAST, LOITER, PeopleTracker, angle_to_bin, detect_events,
+from src.behavior import (COUNTER, DIRECTIONS, EVENTS, FAST, LOITER, IoUTracker, PeopleTracker, angle_to_bin,
+                          detect_events, track_velocities,
                           per_person, summarize)
 from src.dataset import extract_video
 from src.utils import list_frames, load_config, out_dir, read_frame
@@ -31,10 +34,42 @@ TAGS = ((COUNTER, "COUNTER-FLOW", RED), (FAST, "TOO FAST", RED), (LOITER, "LOITE
 _TRACKERS: dict = {}                                     # one people tracker per device, shared by all models
 
 
+class LightPeople(PeopleTracker):
+    """For a server without a GPU (the free online app): people are found at a smaller image size
+    and only on every `every`-th frame, their boxes kept in between. Several times faster on a CPU,
+    slightly coarser tracks. Env VAD_DETECTOR_SIZE / VAD_DETECT_EVERY; never used for the results."""
+
+    def __init__(self, cfg, device, every=1):
+        super().__init__(cfg, device)
+        self.every = max(int(every), 1)
+
+    def video(self, frame_paths) -> dict:
+        t, (W, H) = self.cfg["tracking"], self.cfg["frame_size"]
+        tracker, rows, det = IoUTracker(t["match_iou"], t["max_lost"]), [], None
+        for k, p in enumerate(frame_paths):
+            if det is None or k % self.every == 0:
+                img = cv2.imread(str(p))
+                d = self.net([self.to_rgb(img, self.device)])[0]
+                det = (d["boxes"].cpu().numpy(), d["scores"].cpu().numpy(), W / img.shape[1], H / img.shape[0])
+            boxes, scores, sx, sy = det
+            for b, i, s in zip(boxes, tracker.update(boxes, scores), scores):
+                if i > 0:
+                    rows.append([k, i, b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy, s])
+        tracks = np.array(rows, np.float32).reshape(-1, 7)
+        vel, moving = track_velocities(tracks, t["window"], t["smooth"], t["min_speed"])
+        return {"tracks": tracks, "velocity": vel, "moving": moving, "frame_names": np.array([p.name for p in frame_paths])}
+
+
 def tracker(cfg, device):
-    key = (PeopleTracker, str(device))
+    size, every = os.environ.get("VAD_DETECTOR_SIZE"), int(os.environ.get("VAD_DETECT_EVERY") or 1)
+    key = (PeopleTracker, str(device), size, every)
     if key not in _TRACKERS:
-        _TRACKERS[key] = PeopleTracker(cfg, device)
+        if size or every > 1:
+            cfg = copy.deepcopy(cfg)
+            cfg["tracking"]["detector_size"] = int(size or cfg["tracking"]["detector_size"])
+            _TRACKERS[key] = LightPeople(cfg, device, every)
+        else:
+            _TRACKERS[key] = PeopleTracker(cfg, device)
     return _TRACKERS[key]
 
 
@@ -67,6 +102,9 @@ class Analyzer:
             from src.models import scorer
             self.cfg = cfg
             self.scorer = scorer(cfg, out_dir(cfg, "training") / "model.pth", self.device)
+            if cfg["model"].get("family") != "mulde" and self.name != "astt_baseline":
+                from src.models.astt_fast import CachedScorer      # same scores, each frame's ViT once
+                self.scorer = CachedScorer(self.scorer)
             self.threshold = threshold or api["threshold"] or json.loads(
                 (out_dir(cfg, "evaluation") / "metrics.json").read_text())["threshold_raw_at_eer"]
 

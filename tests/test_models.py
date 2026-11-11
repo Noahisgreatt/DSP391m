@@ -60,3 +60,24 @@ def test_model6_uses_model5_weights_and_smooths():
     s = np.r_[[np.nan] * 4, np.zeros(20), 1.0, np.zeros(20)]                # one noisy frame
     out = smooth(s, c6["scoring"]["smoothing_sigma"])
     assert np.isnan(out[:4]).all() and out[24] < 0.1 and 0.95 < np.nansum(out) <= 1.0     # spread, not lost
+
+
+@pytest.mark.parametrize("name", ["astt_improved", "astt_lite"])
+def test_cached_scoring_gives_the_same_scores(tmp_path, name):
+    """astt_fast (API / app: each frame through the ViT once) == astt.score_video (evaluation)."""
+    import cv2
+    import numpy as np
+    from src.models.astt import score_video
+    from src.models.astt_fast import score_video_cached
+    rng = np.random.default_rng(0)
+    for i in range(11):
+        cv2.imwrite(str(tmp_path / f"{i:06d}.jpg"), rng.integers(0, 255, (120, 160, 3), dtype=np.uint8))
+    cfg = load_config(f"configs/{name}.yaml")
+    cfg["eval"]["batch_size"] = 3                         # several batches: the cache must carry over
+    torch.manual_seed(0)
+    model = build(cfg, pretrained=False).eval()
+    ref, ref_maps = score_video(model, cfg, tmp_path, torch.device("cpu"), maps=True, num_workers=0)
+    new, new_maps = score_video_cached(model, cfg, tmp_path, torch.device("cpu"), maps=True)
+    assert np.isnan(new[:4]).all() and np.isnan(ref[:4]).all()
+    np.testing.assert_allclose(new[4:], ref[4:], rtol=1e-4, atol=1e-6)
+    np.testing.assert_allclose(new_maps.astype(np.float32), ref_maps.astype(np.float32), atol=2e-3)

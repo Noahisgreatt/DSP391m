@@ -82,9 +82,11 @@ jobs:
         run: docker build -f docker/Dockerfile.app --build-arg BASE=python:3.11-slim --build-arg TORCH=cpu -t dsp391m-app:ci .
       - name: Run it as a non-root user (as Hugging Face does) and use it
         run: |
-          docker run -d --name app --user 1000:1000 -p 7860:7860 -e VAD_MAX_SECONDS=2 dsp391m-app:ci
+          docker run -d --name app --user 1000:1000 -p 7860:7860 -e VAD_MAX_SECONDS=2 \
+              -e VAD_DETECTOR_SIZE=480 -e VAD_DETECT_EVERY=3 dsp391m-app:ci        # the Space's light mode
           for i in $(seq 60); do curl -fs localhost:7860/health && break; sleep 5; done
-          echo; curl -fs localhost:7860/models | tee models.json; echo
+          echo; curl -fs localhost:7860/health | grep -q '"light_tracking":true' && echo "light mode on"
+          curl -fs localhost:7860/models | tee models.json; echo
           python -c "import json; m = json.load(open('models.json')); assert m['default'] == 'astt_improved' and m['models'][0]['ready'], m"
           curl -fs localhost:7860/ | grep -qi "<!doctype html" && echo "web page OK"
           curl -fs -o /dev/null localhost:7860/docs && echo "API docs OK"
