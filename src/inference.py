@@ -74,7 +74,8 @@ class Analyzer:
         return {"model": self.name or "none", "device": str(self.device), "threshold": self.threshold,
                 "score_type": None if self.scorer is None else self.scorer.kind, "warning": self.warning}
 
-    def run(self, video, work, draw=True) -> dict:
+    def run(self, video, work, draw=True, max_seconds=None) -> dict:
+        """max_seconds: analyze only the beginning of a long video (the public app on a CPU)."""
         video, work = Path(video), Path(work)
         work.mkdir(parents=True, exist_ok=True)
         tm, t0 = {}, time.time()
@@ -86,6 +87,11 @@ class Analyzer:
             meta = json.loads((fdir / "meta.json").read_text()) if (fdir / "meta.json").exists() else extract_video(video, fdir)
             fps = meta["fps"] or 25.0
         frames = list_frames(fdir)
+        total_frames = len(frames)
+        if max_seconds and not video.is_dir() and len(frames) > max_seconds * fps:   # our own copy: drop the rest
+            for f in frames[int(max_seconds * fps):]:
+                f.unlink()
+            frames = list_frames(fdir)
         tm["frames_s"] = round(time.time() - t0, 2)
         t1 = time.time()                                              # 2. people
         tr = self.people.video(frames)
@@ -101,11 +107,15 @@ class Analyzer:
             maps = extra.get("maps")
         tm["model_s"] = round(time.time() - t2, 2)
         warning = self.warning
+        if len(frames) < total_frames:
+            warning = " ".join(filter(None, [warning, f"Only the first {len(frames) / fps:.0f} s of the "
+                                             f"{total_frames / fps:.0f} s video were analyzed (limit of this server)."]))
         valid = np.array([]) if scores is None else scores[~np.isnan(scores)]
         if len(valid) and np.mean(valid > self.threshold) > 0.8:
-            warning = ("The model finds almost every frame abnormal: this camera probably looks unlike the 13 "
-                       "ShanghaiTech training cameras, so its scores are not calibrated here. Trust the people "
-                       "boxes (behavior rules); for the model, train it on normal video from this camera.")
+            warning = " ".join(filter(None, [warning, (
+                "The model finds almost every frame abnormal: this camera probably looks unlike the 13 "
+                "ShanghaiTech training cameras, so its scores are not calibrated here. Trust the people "
+                "boxes (behavior rules); for the model, train it on normal video from this camera.")]))
         result_video = None
         if draw:                                                      # 5. draw
             t3 = time.time()

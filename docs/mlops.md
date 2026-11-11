@@ -51,6 +51,15 @@ mounted from `outputs/`), `prometheus`, `grafana`. GPU: add `-f docker-compose.g
 The models must be trained (or `dvc pull`ed) first, so that `outputs/training/<model>/model.pth`
 and `outputs/evaluation/<model>/metrics.json` exist.
 
+## The app image (`docker/Dockerfile.app`): everything + model 2 in one container
+`app/server.py` serves the web page (`/`) and the API (`/docs`, `/analyze`, ...) on ONE port, and
+the image contains model 2's trained weights, so no code, data or DVC is needed to run it:
+`docker run --gpus all -p 7860:7860 ghcr.io/<owner>/dsp391m-app`. Built and published from the
+computer that has the model: `bash docker/publish.sh v5.0` (once: `docker login ghcr.io`).
+Settings by environment: `VAD_MODELS` (offered models, default model 2 only), `VAD_MAX_SECONDS`
+(longest part of a video analyzed, default 60; 0 = all). CI builds a CPU variant with stand-in
+weights on every push, runs it as a non-root user and analyzes a test video through the API.
+
 ## CI/CD (`.github/workflows/ci.yml`, GitHub Actions)
 | When | What runs |
 |---|---|

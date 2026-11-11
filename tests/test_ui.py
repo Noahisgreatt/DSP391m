@@ -52,3 +52,28 @@ def test_upload_is_converted_to_480p_h264(tmp_path):
                             "-of", "csv=p=0", out], capture_output=True, text=True).stdout.strip()
     assert out.endswith("_h264.mp4") and probe == "h264,1080,25/1"
     assert prepare_upload(None) is None
+
+
+def test_one_server_serves_page_and_api(monkeypatch):
+    """app.server (the Docker app, the Space): the web page at / and the API on the same port."""
+    import numpy as np
+    pytest.importorskip("torch")
+    monkeypatch.setenv("VAD_MODEL", "none")
+    import src.inference as inf
+
+    class NoPeople:
+        def __init__(self, *a, **k):
+            pass
+
+        def video(self, frames):
+            return {"tracks": np.zeros((0, 7), np.float32), "velocity": np.zeros((0, 2), np.float32),
+                    "moving": np.zeros(0, bool), "frame_names": np.array([])}
+    monkeypatch.setattr(inf, "PeopleTracker", NoPeople)
+    from fastapi.testclient import TestClient
+    import app.server as srv
+    with TestClient(srv.app) as c:
+        assert c.get("/health").json()["status"] == "ok"
+        assert c.get("/models").json()["default"] == "none"
+        page = c.get("/")
+        assert page.status_code == 200 and "<!doctype html" in page.text.lower()
+        assert c.get("/docs").status_code == 200 and c.get("/metrics").status_code == 200

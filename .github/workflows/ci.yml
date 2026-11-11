@@ -1,6 +1,7 @@
 # CI / CD (GitHub Actions)
 #   CI, every push and pull request: install (CPU PyTorch), fetch the papers' code, run all tests,
-#      check the Docker setup and build the web page image.
+#      check the Docker setup, build the web page image, and build + run + use the app image
+#      (docker/Dockerfile.app: page + API + model 2, here with stand-in weights).
 #   CD, every version tag (v5.0 ...; made by `python -m src.release`, pushed with
 #      `git push --follow-tags`): build both images and publish them to GitHub Packages:
 #      ghcr.io/<owner>/dsp391m-api:<version> and ghcr.io/<owner>/dsp391m-ui:<version>
@@ -44,10 +45,60 @@ jobs:
       - name: Build the web page image
         run: docker build -f docker/Dockerfile.ui -t dsp391m-ui:ci .
 
+  app:
+    name: App image (model 2) end to end
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Stand-in for model 2 (CI has no trained model, so random weights of the same network)
+        run: |
+          pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-api.txt
+          python third_party/fetch.py
+          python - <<'PY'
+          import json, torch
+          from pathlib import Path
+          from src.utils import load_config
+          from src.models.astt import build, count_parameters
+          m = build(load_config("configs/astt_improved.yaml"), pretrained=False)
+          d = Path("outputs/training/astt_improved"); d.mkdir(parents=True, exist_ok=True)
+          torch.save(m.state_dict(), d / "model.pth")
+          (d / "run.json").write_text(json.dumps({"parameters": count_parameters(m)}))
+          e = Path("outputs/evaluation/astt_improved"); e.mkdir(parents=True, exist_ok=True)
+          (e / "metrics.json").write_text(json.dumps({"auc_macro": 0.81, "threshold_raw_at_eer": 0.01}))
+          import cv2, numpy as np                                   # a 3 s test video
+          w = cv2.VideoWriter("clip.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 25, (640, 360))
+          for t in range(75):
+              img = np.full((360, 640, 3), 110, np.uint8); cv2.rectangle(img, (20 + 4 * t, 120), (60 + 4 * t, 240), (40, 40, 40), -1); w.write(img)
+          w.release()
+          PY
+      - name: Build the app image (CPU variant)
+        run: docker build -f docker/Dockerfile.app --build-arg BASE=python:3.11-slim --build-arg TORCH=cpu -t dsp391m-app:ci .
+      - name: Run it as a non-root user (as Hugging Face does) and use it
+        run: |
+          docker run -d --name app --user 1000:1000 -p 7860:7860 -e VAD_MAX_SECONDS=2 dsp391m-app:ci
+          for i in $(seq 60); do curl -fs localhost:7860/health && break; sleep 5; done
+          echo; curl -fs localhost:7860/models | tee models.json; echo
+          python -c "import json; m = json.load(open('models.json')); assert m['default'] == 'astt_improved' and m['models'][0]['ready'], m"
+          curl -fs localhost:7860/ | grep -qi "<!doctype html" && echo "web page OK"
+          curl -fs -o /dev/null localhost:7860/docs && echo "API docs OK"
+          curl -fs -F file=@clip.mp4 localhost:7860/analyze | tee result.json | head -c 400; echo
+          python -c "import json; r = json.load(open('result.json')); assert r['model'] == 'astt_improved' and r['frames'] == 50 and 'first 2 s' in r['warning'], r"
+          curl -fs -o result.mp4 localhost:7860$(python -c "import json; print(json.load(open('result.json'))['result_video'])") && ls -l result.mp4
+      - name: Container log
+        if: always()
+        run: docker logs app 2>&1 | tail -60
+
   publish:
     name: Publish images (version tags)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, docker]
+    needs: [test, docker, app]
     runs-on: ubuntu-latest
     permissions:
       contents: read

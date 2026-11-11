@@ -18,6 +18,28 @@ The page uses the FastAPI service (http://localhost:8000/docs), which anyone can
 Grafana (http://localhost:3000) monitors both. The trained models must be in `outputs/` first
 (`bash run_all.sh` or `dvc pull`). Details: [docs/mlops.md](docs/mlops.md).
 
+### The app in one command (model 2 inside, nothing else needed)
+```bash
+docker run --gpus all -p 7860:7860 ghcr.io/noahisgreatt/dsp391m-app     # no NVIDIA GPU: leave out --gpus all
+```
+Web page: http://localhost:7860 · API: http://localhost:7860/docs. The image (`docker/Dockerfile.app`)
+holds the page, the API and model 2; `bash docker/publish.sh v5.0` builds and publishes a new one.
+
+### Using the API from code
+```bash
+curl -F file=@clip.mp4 http://localhost:7860/analyze > result.json          # people, events, scores
+curl -o result.mp4 http://localhost:7860$(python -c "import json;print(json.load(open('result.json'))['result_video'])")
+```
+```python
+import requests
+r = requests.post("http://localhost:7860/analyze", files={"file": open("clip.mp4", "rb")}).json()
+for e in r["events"]:                       # who did what, when
+    print(f"person #{e['track_id']}: {e['event']} {e['start_s']}-{e['end_s']} s ({e['reason']})")
+print(r["people"][:3])                       # every person: seen from / to, main direction
+print(r["abnormal_ratio"])                   # share of frames the model finds abnormal
+```
+All fields: http://localhost:7860/docs. With `serve.sh` / docker compose the API is on port 8000 instead.
+
 ## Results (107 test videos)
 
 | # | Model | Parameters | AUC micro | AUC per-video | AUC macro | EER | Frames/s |

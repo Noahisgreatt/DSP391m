@@ -6,13 +6,15 @@ the model finds abnormal, and a result video. Prometheus metrics at /metrics.
 
 Endpoints
     GET  /health                 is the service up, which model is the default
-    GET  /models                 the four models: ready or not, parameters, test AUC / EER
+    GET  /models                 every model offered: ready or not, parameters, test AUC / EER
     POST /analyze                form field `file` = video (.mp4/.avi/.mov), ?model=...&render=true
     GET  /results/{job_id}/video the result video (H.264: boxes, directions, tags, score curve)
     GET  /metrics                Prometheus metrics
 Default model: configs/api.yaml (api.model), or env VAD_MODEL=astt_baseline | astt_improved | mulde |
 mulde_improved | none. ?model= picks another one per request (loaded on first use, at most
 api.max_models_loaded kept in GPU memory). The web page (app/gradio_app.py) is a client of this API.
+Env VAD_MODELS=astt_improved,... offers only those models (the Docker app: model 2 only);
+env VAD_MAX_SECONDS=30 analyzes at most the first 30 s of a video (0 / unset: no limit).
 """
 from __future__ import annotations
 
@@ -35,7 +37,8 @@ from src.utils import load_config
 
 from src.models import MODELS as TITLES, trained_dir   # the one list of models
 
-MODELS = tuple(TITLES)
+MODELS = tuple(m for m in TITLES if m in os.environ.get("VAD_MODELS", ",".join(TITLES)).split(","))
+MAX_SECONDS = float(os.environ.get("VAD_MAX_SECONDS") or 0) or None
 NAMES = {**TITLES, "none": "Behavior rules only"}
 
 
@@ -161,7 +164,7 @@ def analyze(file: UploadFile = File(...), model: str | None = None, render: bool
         raise HTTPException(413, f"file larger than {CFG['max_upload_mb']} MB")
     try:
         with lock:
-            r = analyzer(model).run(src, work, draw=render)
+            r = analyzer(model).run(src, work, draw=render, max_seconds=MAX_SECONDS)
     except Exception as e:
         traceback.print_exc()                                         # the full error goes to the API log
         raise HTTPException(422, f"could not analyze the video: {type(e).__name__}: {e}")

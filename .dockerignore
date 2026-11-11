@@ -15,3 +15,7 @@ third_party/ASTT/
 notebooks/
 reports/
 .github/
+# the app image (docker/Dockerfile.app) takes model 2's trained weights and results, nothing else
+!outputs/training/astt_improved/model.pth
+!outputs/training/astt_improved/run.json
+!outputs/evaluation/astt_improved/metrics.json
