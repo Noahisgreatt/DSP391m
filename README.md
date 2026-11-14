@@ -10,7 +10,8 @@ labels) + our own phone videos. Four models are trained and compared on the same
 ```bash
 docker compose up --build -d          # (GPU: add  -f docker-compose.yml -f docker-compose.gpu.yml)
 ```
-No Docker? `bash serve.sh` does the same (API + web page, no Grafana).
+No Docker? `bash serve.sh` does the same (page + API on port 7860, no Grafana); `bash serve.sh --share`
+adds one public https link for both, while the laptop runs it (free Cloudflare tunnel).
 Open **http://localhost:7860**, upload a video, choose a model, press **Analyze**. You get the video
 back with a box and a direction arrow on every person, red / yellow boxes on the people who move
 against the crowd, run or loiter, the anomaly score over time, and tables of who did what and when.
@@ -42,7 +43,7 @@ for e in r["events"]:                       # who did what, when
 print(r["people"][:3])                       # every person: seen from / to, main direction
 print(r["abnormal_ratio"])                   # share of frames the model finds abnormal
 ```
-All fields: http://localhost:7860/docs. With `serve.sh` / docker compose the API is on port 8000 instead.
+All fields: http://localhost:7860/docs (same with `bash serve.sh`; with docker compose the API is on port 8000).
 
 ## Results (107 test videos)
 

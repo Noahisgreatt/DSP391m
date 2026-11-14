@@ -1,22 +1,51 @@
 #!/usr/bin/env bash
-# Start the product WITHOUT Docker: API (:8000) + web page (:7860). Ctrl+C stops both.
-#   bash serve.sh            then open http://localhost:7860
-#   bash serve.sh --share    also prints a public link (https://....gradio.live, 72 h) anyone can open
+# Start the product WITHOUT Docker: web page + API on one port (app/server.py). Ctrl+C stops everything.
+#   bash serve.sh            page http://localhost:7860, API http://localhost:7860/docs
+#   bash serve.sh --share    + ONE public https link for the page AND the API (Cloudflare quick tunnel:
+#                            free, no account, a new link every start, works while this runs)
 # (With Docker instead: docker compose up --build -d, see docs/mlops.md.)
 cd "$(dirname "$0")"
 eval "$(conda shell.bash hook 2>/dev/null)" && conda activate dsp391m 2>/dev/null || source .venv/bin/activate 2>/dev/null || true
 python -c "import gradio" 2>/dev/null || pip install -q -r requirements-ui.txt
 python -c "import imageio_ffmpeg" 2>/dev/null || pip install -q imageio-ffmpeg
+export PORT=${PORT:-7860}
 mkdir -p outputs/api
-uvicorn api.main:app --host 0.0.0.0 --port 8000 > outputs/api/api.log 2>&1 &
-API=$!
-trap 'kill $API 2>/dev/null' EXIT
-echo "starting the API (loads the models, about 1 minute) ... log: outputs/api/api.log"
-until curl -s localhost:8000/health >/dev/null; do
-    if ! kill -0 $API 2>/dev/null; then echo "the API stopped with an error:"; tail -30 outputs/api/api.log; exit 1; fi
+python -m app.server > outputs/api/server.log 2>&1 &
+SERVER=$!
+TUNNEL=
+trap 'kill $SERVER $TUNNEL 2>/dev/null' EXIT
+echo "starting (loads the models, about 1 minute) ... log: outputs/api/server.log"
+until curl -s "localhost:$PORT/health" >/dev/null; do
+    if ! kill -0 $SERVER 2>/dev/null; then echo "the server stopped with an error:"; tail -30 outputs/api/server.log; exit 1; fi
     sleep 2
 done
-echo "API ready: http://localhost:8000/docs"
-echo "WEB PAGE:  http://localhost:7860   (Ctrl+C here stops both)"
-[[ "$1" == "--share" ]] && export UI_SHARE=1 && echo "public link: wait for 'Running on public URL' below"
-python -m app.gradio_app
+echo "WEB PAGE: http://localhost:$PORT      API: http://localhost:$PORT/docs"
+
+if [[ "$1" == "--share" ]]; then
+    CF=$(command -v cloudflared || echo "$HOME/.local/bin/cloudflared")
+    if [[ ! -x "$CF" ]]; then                            # one-time download of Cloudflare's tunnel program
+        echo "downloading cloudflared (once) ..."
+        ARCH=$([[ "$(uname -m)" == aarch64 ]] && echo arm64 || echo amd64)
+        mkdir -p "$(dirname "$CF")"
+        curl -fsSL -o "$CF" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARCH" && chmod +x "$CF"
+    fi
+    "$CF" tunnel --no-autoupdate --url "http://localhost:$PORT" > outputs/api/tunnel.log 2>&1 &
+    TUNNEL=$!
+    URL=
+    for _ in $(seq 60); do
+        URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' outputs/api/tunnel.log | head -1)
+        [[ -n "$URL" ]] && break
+        sleep 1
+    done
+    if [[ -n "$URL" ]]; then
+        echo
+        echo "PUBLIC LINK (anyone, while this runs):"
+        echo "   web page:  $URL"
+        echo "   API:       $URL/docs     e.g.  curl -F file=@clip.mp4 $URL/analyze"
+        echo "   (uploads up to 100 MB through the tunnel; the laptop must stay on and awake)"
+    else
+        echo "no public link yet: see outputs/api/tunnel.log"
+    fi
+fi
+echo "Ctrl+C stops everything"
+wait $SERVER

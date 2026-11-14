@@ -20,4 +20,5 @@ from app.gradio_app import OUT, build                  # noqa: E402
 app = gr.mount_gradio_app(api, build().queue(default_concurrency_limit=1), path="/", allowed_paths=[str(OUT)])
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    # behind a tunnel / proxy (serve.sh --share): trust its https headers, so the page's links stay https
+    uvicorn.run(app, host="0.0.0.0", port=PORT, proxy_headers=True, forwarded_allow_ips="*")

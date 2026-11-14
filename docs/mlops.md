@@ -66,7 +66,10 @@ Settings by environment: `VAD_MODELS` (offered models, default model 2 only), `V
 The API scores models 2, 5, 6 with `src/models/astt_fast.py`: each frame through the ViT once
 instead of 4 times, the same scores (tested), ~2.8x faster on a CPU.
 
-**Live demo, fast:** `bash serve.sh --share` on the laptop (GPU) gives a public link while it runs.
+**Live, fast, free:** `bash serve.sh --share` on the laptop (GPU): one public https link
+(Cloudflare quick tunnel) for the page (`/`) and the API (`/docs`, `/analyze`) while it runs; a new
+link every start; uploads up to 100 MB. Note (2026-11): Hugging Face no longer hosts Docker / Gradio
+Spaces on free accounts (PRO needed), so the Space deploy below needs a PRO account.
 
 ## Online for everyone: Hugging Face Space (free, CPU), deployed by CI/CD
 `docker/deploy_space.py` uploads the app's code, the Space page (`docker/huggingface/README.md`)
