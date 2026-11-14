@@ -76,7 +76,7 @@ found at 480 px on every 3rd frame); the Space builds and runs it. Page at
 
 One-time setup (5 minutes):
 1. huggingface.co: create an account, then Settings -> Access Tokens -> a token with **write** access.
-2. On the computer with the trained model: `huggingface-cli login` (type the token in the terminal),
+2. On the computer with the trained model: `hf auth login` (type the token in the terminal),
    then `python docker/deploy_space.py <user>/dsp391m --with-model`: creates the Space and uploads
    the code + model 2 (~400 MB, once).
 3. GitHub repository -> Settings -> Secrets and variables -> Actions: secret `HF_TOKEN` = the token,

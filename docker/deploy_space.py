@@ -4,7 +4,7 @@
     python docker/deploy_space.py <hf-user>/dsp391m                # later: code only (what CI/CD does on every version)
     python docker/deploy_space.py <hf-user>/dsp391m --dry-run      # only show what would be uploaded
 
-Needs a Hugging Face token with write access: `huggingface-cli login` once (type it in the
+Needs a Hugging Face token with write access: `hf auth login` once (type it in the
 terminal), or the HF_TOKEN environment variable (the GitHub secret in CI/CD).
 
 What is uploaded: the code the app needs, docker/huggingface/README.md as the Space's page, and a
