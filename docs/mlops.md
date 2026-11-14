@@ -33,6 +33,10 @@
 | `POST /analyze?model=...` | upload a video -> every person (time seen, main walking direction), LOITERING / COUNTER_FLOW / TOO_FAST events (who, when, why), per-frame scores, abnormal frames, link to the result video |
 | `GET /results/{job}/video` | the annotated video (H.264, plays in a browser) |
 | `GET /metrics` | Prometheus metrics |
+Every response has a schema (`api/schemas.py`: `AnalyzeResult`, `Event`, `Person`, `ModelList`, `Health`),
+shown with examples on `/docs`. Every error is `{"error": "<code>", "detail": "<text>"}`: `unknown_model`,
+`empty_file` (400), `not_found` (404), `file_too_large` (413), `unsupported_file_type` (415),
+`invalid_request`, `cannot_analyze` (422), `internal_error` (500).
 Default model: `configs/api.yaml` or `VAD_MODEL=astt_baseline|astt_improved|mulde|mulde_improved|none`;
 `?model=` picks another one per request (loaded on first use, at most `max_models_loaded` kept in
 GPU memory). A model that isn't trained + evaluated yet serves the behavior rules only, with a

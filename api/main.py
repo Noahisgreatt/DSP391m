@@ -29,9 +29,13 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, File, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from api.schemas import AnalyzeResult, ErrorResponse, Health, ModelList
 
 from src.utils import load_config
 
@@ -107,7 +111,62 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DSP391m video anomaly detection", version="3.0", lifespan=lifespan)
+DESCRIPTION = """
+Upload a video and get back **who** behaves abnormally (loitering, moving against the crowd,
+running), **every person's walking direction**, **which frames** the model finds abnormal, and an
+**annotated result video**.
+
+1. `GET /models`: the models this server offers, with their test accuracy.
+2. `POST /analyze` with the video as form field `file` (optionally `?model=`): the analysis (JSON).
+3. `GET /results/{job_id}/video`: the annotated video of that analysis.
+
+Errors always look like `{"error": "<code>", "detail": "<what went wrong>"}` with a matching HTTP
+status (400, 404, 413, 415, 422, 500).
+"""
+TAGS = [{"name": "analysis", "description": "Analyze a video and fetch the result video"},
+        {"name": "service", "description": "Health, available models, Prometheus metrics"}]
+app = FastAPI(title="DSP391m video anomaly detection", version="3.1", description=DESCRIPTION,
+              openapi_tags=TAGS, lifespan=lifespan)
+
+
+class ApiError(Exception):
+    """An error with a stable code; returned as ErrorResponse with the given HTTP status."""
+
+    def __init__(self, status: int, error: str, detail: str):
+        self.status, self.error, self.detail = status, error, detail
+
+
+def error(status: int, code: str, detail: str) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"error": code, "detail": detail})
+
+
+@app.exception_handler(ApiError)
+async def api_error(request: Request, e: ApiError):
+    return error(e.status, e.error, e.detail)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request: Request, e: RequestValidationError):
+    where = "; ".join(f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors())
+    return error(422, "invalid_request", where or "invalid request")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, e: StarletteHTTPException):
+    return error(e.status_code, {404: "not_found", 405: "method_not_allowed"}.get(e.status_code, "http_error"), str(e.detail))
+
+
+@app.exception_handler(Exception)
+async def unexpected(request: Request, e: Exception):
+    traceback.print_exc()
+    return error(500, "internal_error", f"{type(e).__name__}: {e}")
+
+
+ERRORS = {400: {"model": ErrorResponse, "description": "Unknown model or empty file"},
+          413: {"model": ErrorResponse, "description": "File too large"},
+          415: {"model": ErrorResponse, "description": "Not a video file"},
+          422: {"model": ErrorResponse, "description": "Missing file, or a video that can't be read / analyzed"},
+          500: {"model": ErrorResponse, "description": "Unexpected server error"}}
 
 
 @app.middleware("http")
@@ -126,13 +185,13 @@ async def count_requests(request: Request, call_next):
         M.LATENCY.labels(ep).observe(time.time() - t0)
 
 
-@app.get("/health")
+@app.get("/health", response_model=Health, tags=["service"], summary="Is the service up, and how is it set up")
 def health():
     return {"status": "ok", **analyzer(state["default"]).info(), "max_seconds": MAX_SECONDS,
             "light_tracking": bool(os.environ.get("VAD_DETECTOR_SIZE") or int(os.environ.get("VAD_DETECT_EVERY") or 1) > 1)}
 
 
-@app.get("/models")
+@app.get("/models", response_model=ModelList, tags=["service"], summary="The models this server offers")
 def models():
     return {"default": state["default"], "models": [model_card(n) for n in (*MODELS, "none")]}
 
@@ -144,14 +203,20 @@ def clean_old_jobs():
         shutil.rmtree(d, ignore_errors=True)
 
 
-@app.post("/analyze")
-def analyze(file: UploadFile = File(...), model: str | None = None, render: bool = True):
+@app.post("/analyze", response_model=AnalyzeResult, responses=ERRORS, tags=["analysis"],
+          summary="Analyze one video: abnormal people, directions, abnormal frames, result video")
+def analyze(file: UploadFile = File(..., description="The video: .mp4, .avi, .mov, .mkv or .m4v"),
+            model: str | None = Query(None, description="Model name from GET /models (default: the server's default)",
+                                      examples=["astt_improved"]),
+            render: bool = Query(True, description="Also draw the annotated result video (false: JSON only, faster)")):
+    """Runs people tracking + the behavior rules (LOITERING, COUNTER_FLOW, TOO_FAST) and the chosen
+    model on the uploaded video. One video at a time: a second request waits for the first."""
     model = model or state["default"]
     if model not in (*MODELS, "none"):
-        raise HTTPException(400, f"unknown model {model!r}; one of {[*MODELS, 'none']}")
+        raise ApiError(400, "unknown_model", f"unknown model {model!r}; one of {[*MODELS, 'none']}")
     ext = Path(file.filename or "").suffix.lower()
     if ext not in VIDEO_EXTS:
-        raise HTTPException(400, f"unsupported file type {ext!r}; send one of {sorted(VIDEO_EXTS)}")
+        raise ApiError(415, "unsupported_file_type", f"unsupported file type {ext!r}; send one of {sorted(VIDEO_EXTS)}")
     WORK.mkdir(parents=True, exist_ok=True)
     clean_old_jobs()
     job = uuid.uuid4().hex[:12]
@@ -160,15 +225,18 @@ def analyze(file: UploadFile = File(...), model: str | None = None, render: bool
     src = work / f"input{ext}"
     with open(src, "wb") as f:
         shutil.copyfileobj(file.file, f)
+    if src.stat().st_size == 0:
+        shutil.rmtree(work)
+        raise ApiError(400, "empty_file", "the uploaded file is empty")
     if src.stat().st_size > CFG["max_upload_mb"] * 1024 * 1024:
         shutil.rmtree(work)
-        raise HTTPException(413, f"file larger than {CFG['max_upload_mb']} MB")
+        raise ApiError(413, "file_too_large", f"file larger than {CFG['max_upload_mb']} MB")
     try:
         with lock:
             r = analyzer(model).run(src, work, draw=render, max_seconds=MAX_SECONDS)
     except Exception as e:
         traceback.print_exc()                                         # the full error goes to the API log
-        raise HTTPException(422, f"could not analyze the video: {type(e).__name__}: {e}")
+        raise ApiError(422, "cannot_analyze", f"could not analyze the video: {type(e).__name__}: {e}")
     finally:
         shutil.rmtree(work / "frames", ignore_errors=True)            # keep only the results
         src.unlink(missing_ok=True)
@@ -192,14 +260,16 @@ def analyze(file: UploadFile = File(...), model: str | None = None, render: bool
     return r
 
 
-@app.get("/results/{job_id}/video")
+@app.get("/results/{job_id}/video", tags=["analysis"], summary="The annotated video of an analysis",
+         response_class=FileResponse, responses={200: {"content": {"video/mp4": {}}, "description": "H.264 video"},
+                                                  404: {"model": ErrorResponse, "description": "No such job"}})
 def result_video(job_id: str):
     f = WORK / Path(job_id).name / "result.mp4"
     if not f.exists():
-        raise HTTPException(404, "no result video for this job")
+        raise ApiError(404, "not_found", f"no result video for job {job_id!r} (old results are deleted)")
     return FileResponse(f, media_type="video/mp4", filename=f"{job_id}.mp4")
 
 
-@app.get("/metrics")
+@app.get("/metrics", tags=["service"], summary="Prometheus metrics", response_class=Response)
 def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

@@ -44,7 +44,7 @@ All fields: http://localhost:7860/docs. With `serve.sh` / docker compose the API
 
 | # | Model | Parameters | AUC micro | AUC per-video | AUC macro | EER | Frames/s |
 |---|---|---|---|---|---|---|---|
-| 1 | ASTT, the thesis model (2 epochs) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 |
+| 1 | ASTT, the thesis model (4 epochs; results so far: after epoch 2) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 |
 | 2 | ASTT improved (ours, 4 epochs) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** |
 | 3 | MULDE, CVPR 2024 | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 |
 | 4 | MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 |
@@ -199,6 +199,7 @@ Prometheus + Grafana (`docker compose up --build -d` -> Grafana http://localhost
 |---|---|
 | How do I run everything? | `bash run_all.sh` |
 | How does a user try it? | `docker compose up --build -d`, then http://localhost:7860 |
+| What does the API return? What errors? | `/docs` on the API (schemas: `api/schemas.py`); every error is `{"error": code, "detail": text}` with status 400 / 404 / 413 / 415 / 422 / 500 |
 | Where is the thesis model? Is it really unchanged? | `src/models/astt.py` (ASTTThesis) on top of `third_party/ASTT`; `python third_party/fetch.py --check` proves the repo files are unedited; `tests/test_models.py` checks 150,579,876 parameters |
 | Did you use a model API / wrapper? | No: `src/models/nets.py`; proof in `tests/test_nets.py` and `tests/test_no_wrappers.py` |
 | What did you improve? | `configs/astt_improved.yaml`, `configs/mulde_improved.yaml`: every change marked `[CHANGE]`; reasons in docs/models.md |

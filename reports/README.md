@@ -7,7 +7,7 @@ Everything here is produced by code in this repository, so it can be checked and
 
 | Model | Parameters | AUC micro | AUC per-video | AUC macro | EER | Frames/s |
 |---|---|---|---|---|---|---|
-| 1 ASTT, the thesis model (2 epochs) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 |
+| 1 ASTT, the thesis model (4 epochs; results so far: after epoch 2) | 150.6M | 47.0% | 63.9% | 67.7% | 40.2% | 35.5 |
 | 2 ASTT improved (ours, 4 epochs) | 100.4M | 57.6% | 72.6% | **81.0%** | 33.0% | **84.2** |
 | 3 MULDE, CVPR 2024 | 70.7M | **66.7%** | **76.2%** | 75.1% | **29.9%** | 15.3 |
 | 4 MULDE improved (ours) | 58.1M | 66.3% | 71.4% | 73.5% | 33.5% | 7.9 |
