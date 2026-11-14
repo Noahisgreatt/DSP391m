@@ -25,4 +25,7 @@ pytest>=8.0
 pandas>=2.0
 nbconvert>=7.0
 ipykernel>=6.0
+# deploying the app to Hugging Face Spaces (docker/deploy_space.py) and linting (ruff check .)
+huggingface_hub>=0.24
+ruff>=0.6
 # the web page: pip install -r requirements-ui.txt  (or docker compose, which runs it in its own container)

@@ -1,0 +1,16 @@
+# Lint (CI job "Lint": ruff check .). pyflakes + pycodestyle + bugbear: real mistakes
+# (unused / undefined names, bare excepts, mutable defaults ...), not our compact style.
+line-length = 160
+extend-exclude = ["third_party"]
+
+[lint]
+select = ["E", "F", "W", "B"]
+ignore = [
+    "E731",   # small named lambdas are used on purpose
+    "E702",   # a few short statements on one line
+    "B905",   # zip() without strict=: lengths are equal or truncation is intended
+    "B904",   # re-raised errors keep their message on purpose
+]
+
+[lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.File", "fastapi.Query", "gradio.Progress"]   # how these frameworks declare parameters

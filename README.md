@@ -25,6 +25,10 @@ docker run --gpus all -p 7860:7860 ghcr.io/noahisgreatt/dsp391m-app     # no NVI
 Web page: http://localhost:7860 · API: http://localhost:7860/docs. The image (`docker/Dockerfile.app`)
 holds the page, the API and model 2; `bash docker/publish.sh v5.0` builds and publishes a new one.
 
+### Online for everyone (Hugging Face Space, free CPU)
+`python docker/deploy_space.py <hf-user>/dsp391m --with-model` once; after that CI/CD deploys every new
+version by itself. Setup (token, GitHub secret): [docs/mlops.md](docs/mlops.md#online-for-everyone-hugging-face-space-free-cpu-deployed-by-cicd).
+
 ### Using the API from code
 ```bash
 curl -F file=@clip.mp4 http://localhost:7860/analyze > result.json          # people, events, scores
@@ -146,8 +150,9 @@ src/                  ALL code of the pipeline, one file per step
 configs/              ALL settings: data, behavior, api + one file per model
 app/gradio_app.py     the web page (Gradio), a client of the API
 api/main.py           FastAPI service + Prometheus metrics
-docker/               Dockerfile.api, Dockerfile.ui   (docker-compose.yml at the root starts everything)
-.github/workflows/    CI/CD: tests + Docker build on every push, images published on every version tag
+docker/               Dockerfile.api, Dockerfile.ui (docker-compose.yml at the root), Dockerfile.app (all-in-one,
+                      model 2), publish.sh (-> GitHub Packages), deploy_space.py + huggingface/ (-> Hugging Face)
+.github/workflows/    CI/CD: lint, tests, Docker images checked on every push; deploy to Hugging Face on every version
 reports/              results, figures (reports/figures/), how to check them: reports/README.md
 docs/                 technical notes: models, MLOps, versions, Kaggle
 monitoring/           Prometheus + Grafana          tests/   pytest

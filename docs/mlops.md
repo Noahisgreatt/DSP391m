@@ -66,19 +66,36 @@ Settings by environment: `VAD_MODELS` (offered models, default model 2 only), `V
 The API scores models 2, 5, 6 with `src/models/astt_fast.py`: each frame through the ViT once
 instead of 4 times, the same scores (tested), ~2.8x faster on a CPU.
 
-**Online, free (Hugging Face Space, CPU):** `docker/huggingface/` (a Dockerfile `FROM` the CPU app
-image + light mode: 15 s, 480 px, every 3rd frame; about 3-5 min per 10-s clip on its 2 cores).
-Create a Space (SDK Docker, blank, public), upload these two files, done; after a new
-`publish.sh`: Space -> Settings -> Factory rebuild. Page at the Space's address, API at `/docs`.
-**Live demo, fast:** `bash serve.sh --share` on the laptop (GPU) gives a public link while it runs. CI builds a CPU variant with stand-in
-weights on every push, runs it as a non-root user and analyzes a test video through the API.
+**Live demo, fast:** `bash serve.sh --share` on the laptop (GPU) gives a public link while it runs.
+
+## Online for everyone: Hugging Face Space (free, CPU), deployed by CI/CD
+`docker/deploy_space.py` uploads the app's code, the Space page (`docker/huggingface/README.md`)
+and a Dockerfile made from `docker/Dockerfile.app` (CPU variant + light mode: first 15 s, people
+found at 480 px on every 3rd frame); the Space builds and runs it. Page at
+`https://huggingface.co/spaces/<user>/<space>`, API at `https://<user>-<space>.hf.space/docs`.
+
+One-time setup (5 minutes):
+1. huggingface.co: create an account, then Settings -> Access Tokens -> a token with **write** access.
+2. On the computer with the trained model: `huggingface-cli login` (type the token in the terminal),
+   then `python docker/deploy_space.py <user>/dsp391m --with-model`: creates the Space and uploads
+   the code + model 2 (~400 MB, once).
+3. GitHub repository -> Settings -> Secrets and variables -> Actions: secret `HF_TOKEN` = the token,
+   variable `HF_SPACE` = `<user>/dsp391m`.
+
+From then on every version (`python -m src.release`, `git push --follow-tags`) or the **Run
+workflow** button (Actions -> CI/CD) runs lint + tests + the app image check and then **deploys
+the code to the Space automatically**; the Space keeps model 2's weights and rebuilds itself.
 
 ## CI/CD (`.github/workflows/ci.yml`, GitHub Actions)
-| When | What runs |
-|---|---|
-| every push / pull request | install (CPU PyTorch), fetch the thesis code, **all tests** (`pytest`), check the compose files, build the web page image |
-| every version tag (`v5.0` ..., pushed with `git push --follow-tags`) | build both images and publish them: `ghcr.io/<owner>/dsp391m-api:<version>`, `ghcr.io/<owner>/dsp391m-ui:<version>` (GitHub -> Packages) |
-Results: the repository's **Actions** tab (a green tick per commit).
+| When | Job | What it does |
+|---|---|---|
+| every push / pull request | **Lint** | `ruff check .` (settings: `ruff.toml`) |
+| | **Tests** | CPU PyTorch, fetch the thesis code, all tests (`pytest`) |
+| | **Docker setup** | compose files valid, web page image builds |
+| | **App image** | builds exactly what the Space builds (`deploy_space.py --dry-run --out`), runs it as a non-root user, checks `/health`, `/models`, the page, `/docs`, analyzes a test video through the API and downloads the result video (stand-in weights: CI has no trained model) |
+| every version tag + Run workflow button | **Deploy** | uploads the code to the Hugging Face Space (needs `HF_SPACE`, `HF_TOKEN`; skipped without them) |
+| every version tag | **Publish** | compose images to GitHub Packages: `ghcr.io/<owner>/dsp391m-api:<version>`, `dsp391m-ui:<version>` |
+A job runs only if the earlier ones passed. Results: the repository's **Actions** tab.
 
 ## Monitoring (Prometheus + Grafana)
 Grafana http://localhost:3000 (admin/admin), dashboard **DSP391m - Video anomaly detection**:

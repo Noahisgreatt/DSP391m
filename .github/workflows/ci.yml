@@ -1,10 +1,13 @@
 # CI / CD (GitHub Actions)
-#   CI, every push and pull request: install (CPU PyTorch), fetch the papers' code, run all tests,
-#      check the Docker setup, build the web page image, and build + run + use the app image
-#      (docker/Dockerfile.app: page + API + model 2, here with stand-in weights).
-#   CD, every version tag (v5.0 ...; made by `python -m src.release`, pushed with
-#      `git push --follow-tags`): build both images and publish them to GitHub Packages:
-#      ghcr.io/<owner>/dsp391m-api:<version> and ghcr.io/<owner>/dsp391m-ui:<version>
+#   CI, every push and pull request:
+#      lint (ruff) -> tests (pytest, CPU PyTorch) -> Docker: compose files valid, web page image
+#      builds, and the Hugging Face Space image (docker/deploy_space.py) is built, run as a
+#      non-root user and used through the API (with stand-in weights for model 2).
+#   CD, every version tag (v5.0 ...: `python -m src.release`, then `git push --follow-tags`) and
+#      the "Run workflow" button:
+#      - deploy the app to the Hugging Face Space (needs the repository variable HF_SPACE and
+#        the secret HF_TOKEN; skipped without them, see docs/mlops.md)
+#      - publish the compose images: ghcr.io/<owner>/dsp391m-api:<version>, dsp391m-ui:<version>
 name: CI/CD
 
 on:
@@ -15,6 +18,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: pip install ruff==0.16.8 && ruff check .
+
   test:
     name: Tests (CPU)
     runs-on: ubuntu-latest
@@ -78,12 +88,14 @@ jobs:
               img = np.full((360, 640, 3), 110, np.uint8); cv2.rectangle(img, (20 + 4 * t, 120), (60 + 4 * t, 240), (40, 40, 40), -1); w.write(img)
           w.release()
           PY
-      - name: Build the app image (CPU variant)
-        run: docker build -f docker/Dockerfile.app --build-arg BASE=python:3.11-slim --build-arg TORCH=cpu -t dsp391m-app:ci .
+      - name: Build exactly what the Hugging Face Space builds
+        run: |
+          pip install huggingface_hub
+          python docker/deploy_space.py ci/test --with-model --dry-run --out space
+          docker build -t dsp391m-app:ci space
       - name: Run it as a non-root user (as Hugging Face does) and use it
         run: |
-          docker run -d --name app --user 1000:1000 -p 7860:7860 -e VAD_MAX_SECONDS=2 \
-              -e VAD_DETECTOR_SIZE=480 -e VAD_DETECT_EVERY=3 dsp391m-app:ci        # the Space's light mode
+          docker run -d --name app --user 1000:1000 -p 7860:7860 -e VAD_MAX_SECONDS=2 dsp391m-app:ci
           for i in $(seq 60); do curl -fs localhost:7860/health && break; sleep 5; done
           echo; curl -fs localhost:7860/health | grep -q '"light_tracking":true' && echo "light mode on"
           curl -fs localhost:7860/models | tee models.json; echo
@@ -97,10 +109,30 @@ jobs:
         if: always()
         run: docker logs app 2>&1 | tail -60
 
+  deploy:
+    name: Deploy to Hugging Face Spaces
+    if: (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && vars.HF_SPACE != ''
+    needs: [lint, test, docker, app]
+    runs-on: ubuntu-latest
+    environment:
+      name: huggingface
+      url: https://huggingface.co/spaces/${{ vars.HF_SPACE }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: Upload the code to the Space (it keeps model 2's weights and rebuilds itself)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python docker/deploy_space.py "${{ vars.HF_SPACE }}" --message "Deploy ${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+
   publish:
     name: Publish images (version tags)
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, docker, app]
+    needs: [lint, test, docker, app]
     runs-on: ubuntu-latest
     permissions:
       contents: read
